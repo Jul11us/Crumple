@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh-Hans</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>zh-Hans</string>
+		<string>en</string>
+	</array>
+	<key>CFBundleDisplayName</key>
+	<string>Crumple</string>
+	<key>CFBundleExecutable</key>
+	<string>Crumple</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.ziyuanjing.Crumple</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Crumple</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Ziyuan Jing</string>
+	<key>CrumpleUpdateRepository</key>
+	<string></string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Crumple 需要让“访达”帮你清倒废纸篓和移动需要管理员权限的应用。</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Crumple 会在桌面里查找大文件和重复文件。</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Crumple 会在文稿里查找大文件和重复文件。</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Crumple 会扫描下载文件夹，找出安装包、旧下载、大文件和重复文件。</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+</dict>
+</plist>
