@@ -119,38 +119,30 @@ private struct SmartResults: View {
     var body: some View {
         let selected = model.junkSelectedBytes
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: 28) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("扫描完成", systemImage: "checkmark.seal.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(accent)
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        CountUpText(bytes: model.junkFound, start: model.resultsShownAt, font: Theme.title(58))
-                        Text("可以清理").font(.system(size: 20, weight: .medium)).foregroundStyle(Theme.secondary)
-                    }
-                    Text("已为你勾选 \(selected.byteString) 可以放心清理的内容。正在运行的应用和你自己的文件默认不动。")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("扫描完成").font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    CountUpText(bytes: model.junkFound, start: model.resultsShownAt, font: Theme.title(58))
+                    Text("可以清理").font(.system(size: 20, weight: .medium)).foregroundStyle(Theme.secondary)
                 }
-                Spacer(minLength: 0)
-                if model.junkFound > 0 {
-                    Chart(model.junk) { category in
-                        SectorMark(angle: .value(String(localized: "大小"), Double(category.totalBytes)), innerRadius: .ratio(0.64), angularInset: 1.5)
-                            .foregroundStyle(category.kind.chartColor)
-                            .cornerRadius(3)
-                    }
-                    .chartLegend(.hidden)
-                    .frame(width: 150, height: 150)
-                    .overlay {
-                        Image(systemName: "checkmark").font(.system(size: 24)).foregroundStyle(Theme.secondary)
-                    }
-                }
+                Text("已为你勾选 \(selected.byteString) 可以放心清理的内容。正在运行的应用和你自己的文件默认不动。")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 16) {
-                ForEach(model.junk) { ResultCard(category: $0) }
+            // An itemised list, one line per kind of junk, with the selected total at the bottom.
+            VStack(spacing: 0) {
+                ForEach(model.junk) { ResultLine(category: $0) }
+                DashedRule().padding(.vertical, 10)
+                HStack(alignment: .lastTextBaseline, spacing: 6) {
+                    Text("合计").font(.system(size: 14, weight: .semibold))
+                    DottedLeader()
+                    Text(selected.byteString).font(Theme.figures(16, weight: .semibold))
+                }
+                .padding(.horizontal, 12)
             }
+            .surfaceCard(radius: 16, padding: 16)
             .padding(.top, 28)
 
             Spacer(minLength: 16)
@@ -182,44 +174,39 @@ private struct SmartResults: View {
     }
 }
 
-private struct ResultCard: View {
+private struct ResultLine: View {
     let category: CleanCategory
     @Environment(AppModel.self) private var model
 
     var body: some View {
         let kind = category.kind
         let empty = category.liveItems.isEmpty
-        let fraction = category.totalBytes > 0 ? Double(category.selectedBytes) / Double(category.totalBytes) : 0
         Hoverable { hovering in
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    CategoryIcon(kind: kind, size: 34)
-                    Spacer()
-                    CheckBox(state: category.selectionState, tint: kind.color, label: kind.title) { category.toggleAll() }
-                        .disabled(empty)
-                }
-                Text(kind.title).font(.system(size: 15, weight: .semibold))
-                Text(category.totalBytes.byteString).font(Theme.title(24))
-                ProgressBar(value: fraction, accent: kind.color).frame(height: 5).opacity(empty ? 0 : 1)
-                HStack {
+            HStack(alignment: .center, spacing: 12) {
+                CheckBox(state: category.selectionState, tint: kind.color, label: kind.title) { category.toggleAll() }
+                    .disabled(empty)
+                HStack(alignment: .lastTextBaseline, spacing: 6) {
+                    Text(kind.title).font(.system(size: 14))
                     Text(empty ? String(localized: "很干净") : String(localized: "\(category.liveItems.count) 项 · 已选 \(category.selectedBytes.byteString)"))
                         .font(.system(size: 12))
-                        .foregroundStyle(Theme.secondary)
-                    Spacer()
-                    if !empty {
-                        HStack(spacing: 2) {
-                            Text("查看")
-                            Image(systemName: "chevron.right")
-                        }
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(hovering ? kind.color : Theme.tertiary)
-                    }
+                        .foregroundStyle(Theme.tertiary)
+                        .lineLimit(1)
+                    DottedLeader()
+                    Text(category.totalBytes.byteString).font(Theme.figures(14)).fixedSize()
                 }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(hovering && !empty ? Theme.primary : Theme.tertiary)
+                    .opacity(empty ? 0 : 1)
             }
-            .surfaceCard(radius: 16, padding: 16, highlighted: hovering && !empty)
+            .padding(.horizontal, 12)
+            .frame(height: 44)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.fill.opacity(hovering && !empty ? 0.04 : 0)))
             .contentShape(Rectangle())
             .onTapGesture { if !empty { model.openReview(kind) } }
-            .opacity(empty ? 0.55 : 1)
+            .opacity(empty ? 0.5 : 1)
+            .accessibilityAddTraits(empty ? [] : .isButton)
+            .accessibilityHint(empty ? "" : String(localized: "查看"))
         }
     }
 }

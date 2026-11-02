@@ -220,11 +220,12 @@ enum CategoryKind: String, CaseIterable, Identifiable {
     var chartColor: Color {
         switch self {
         case .appCaches: Theme.accent
-        case .logs: .adaptive(light: 0x626A5A, dark: 0x97A68A)
-        case .xcode: .adaptive(light: 0x818876, dark: 0x7E8C72)
-        case .devCaches: .adaptive(light: 0x9DA391, dark: 0x66725A)
-        case .installers: .adaptive(light: 0xB7BCAC, dark: 0x4E5944)
-        case .oldDownloads: .adaptive(light: 0xD5D9CD, dark: 0x3E4637)
+        // Shades of the same ink, from dark to pale, so the chart reads like a printed graph.
+        case .logs: .adaptive(light: 0x55514A, dark: 0xBDB6A8)
+        case .xcode: .adaptive(light: 0x7D786E, dark: 0x9A9384)
+        case .devCaches: .adaptive(light: 0xA19B8F, dark: 0x787264)
+        case .installers: .adaptive(light: 0xC2BCB0, dark: 0x5A554B)
+        case .oldDownloads: .adaptive(light: 0xDCD6CA, dark: 0x443F37)
         default: Theme.chart
         }
     }

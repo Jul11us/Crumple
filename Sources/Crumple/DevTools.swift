@@ -17,26 +17,63 @@ enum DevTools {
             ("light", .light, 1180, 780),
             ("dark-compact", .dark, 1100, 720),
         ]
-        for (name, scheme, width, height) in variants {
+        func render(_ page: Page, _ name: String, _ scheme: ColorScheme, _ width: CGFloat, _ height: CGFloat) {
             NSApp.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
-            for page in [Page.overview, .smartClean, .largeFiles, .duplicates, .uninstaller] {
-                model.page = page
-                let view = HStack(spacing: 0) {
-                    SidebarView().frame(width: Theme.sidebarWidth).background(Theme.sidebar)
-                    Rectangle().fill(Theme.stroke).frame(width: 1)
-                    ZStack {
-                        PageBackground()
-                        interfacePage(page)
-                    }
-                    .clipped()
+            model.page = page
+            let view = HStack(spacing: 0) {
+                SidebarView().frame(width: Theme.sidebarWidth).background(Theme.sidebar)
+                Rectangle().fill(Theme.stroke).frame(width: 1)
+                ZStack {
+                    PageBackground()
+                    interfacePage(page)
                 }
-                .environment(model)
-                .environment(\.colorScheme, scheme)
-                .foregroundStyle(Theme.primary)
-                .frame(width: width, height: height)
-                .background(Theme.base)
-                writeInterfacePNG(view, width: width, height: height,
-                                  to: dir.appendingPathComponent("\(page.rawValue)-\(name).png"))
+                .clipped()
+            }
+            .environment(model)
+            .environment(\.colorScheme, scheme)
+            .tint(Theme.accent)
+            .foregroundStyle(Theme.primary)
+            .frame(width: width, height: height)
+            .background(Theme.base)
+            writeInterfacePNG(view, width: width, height: height, to: dir.appendingPathComponent("\(name).png"))
+        }
+        for (name, scheme, width, height) in variants {
+            for page in [Page.overview, .smartClean, .largeFiles, .duplicates, .uninstaller] {
+                render(page, "\(page.rawValue)-\(name)", scheme, width, height)
+            }
+        }
+
+        // With --states, also walk the demo through scans, a clean and the other pages.
+        guard CommandLine.arguments.contains("--states") else {
+            print("Interface previews: \(dir.path)")
+            return
+        }
+        func pump(_ seconds: Double) { RunLoop.main.run(until: Date().addingTimeInterval(seconds)) }
+        func wait(_ done: () -> Bool) {
+            let end = Date().addingTimeInterval(30)
+            while !done() && Date() < end { pump(0.1) }
+            pump(0.6)
+        }
+        for (name, scheme, width, height) in variants {
+            model.startSmartScan(); wait { model.smartPhase == .results }
+            render(.smartClean, "smartClean-results-\(name)", scheme, width, height)
+            model.openReview(); pump(0.6)
+            render(.smartClean, "smartClean-review-\(name)", scheme, width, height)
+            if name == "light" {
+                model.requestSmartClean(); wait { model.smartPhase == .done }; pump(1.6)
+                render(.smartClean, "smartClean-done-\(name)", scheme, width, height)
+                model.finishSmartClean()
+            }
+            model.scanLargeFiles(); wait { model.filesPhase == .results }
+            render(.largeFiles, "largeFiles-results-\(name)", scheme, width, height)
+            model.scanDuplicates(); wait { model.dupPhase == .results }
+            render(.duplicates, "duplicates-results-\(name)", scheme, width, height)
+            model.scanApps(); wait { model.appsPhase == .results }
+            render(.uninstaller, "uninstaller-results-\(name)", scheme, width, height)
+            for page in [Page.status, .analysis, .optimize, .history] {
+                render(page, "\(page.rawValue)-\(name)", scheme, width, height)
+                pump(3)
+                render(page, "\(page.rawValue)-\(name)", scheme, width, height)
             }
         }
         print("Interface previews: \(dir.path)")
@@ -50,7 +87,10 @@ enum DevTools {
         case .largeFiles: LargeFilesPage()
         case .duplicates: DuplicatesPage()
         case .uninstaller: UninstallerPage()
-        default: EmptyView()
+        case .status: StatusPage()
+        case .analysis: AnalysisPage()
+        case .optimize: OptimizePage()
+        case .history: HistoryPage()
         }
     }
 
