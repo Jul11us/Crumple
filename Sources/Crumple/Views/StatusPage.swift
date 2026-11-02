@@ -9,27 +9,15 @@ struct StatusPage: View {
     var body: some View {
         let monitor = model.monitor
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 24) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text("状态").font(Theme.title(30))
                     Text("每 \(String(format: "%.1f", SystemMonitor.interval)) 秒刷新")
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.tertiary)
-                    Spacer()
                 }
-                .padding(.bottom, 4)
-
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 16) {
-                    HealthCard(monitor: monitor)
-                    CPUCard(monitor: monitor)
-                    GPUCard(monitor: monitor)
-                    MemoryCard(monitor: monitor)
-                    BatteryCard(monitor: monitor)
-                    DiskCard(monitor: monitor)
-                    NetworkCard(monitor: monitor)
-                    ThermalCard(monitor: monitor)
-                }
-
+                HealthLine(monitor: monitor)
+                Readings(monitor: monitor)
                 ProcessTable(monitor: monitor)
             }
             .padding(.horizontal, 32)
@@ -42,230 +30,110 @@ struct StatusPage: View {
     }
 }
 
-// MARK: - Card scaffolding
+// MARK: - Health
 
-private struct StatusCard<Content: View>: View {
-    let symbol: String
-    let title: String
-    var chip: String? = nil
-    var chipColor: Color = Theme.secondary
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: symbol).font(.system(size: 16)).foregroundStyle(Theme.secondary)
-                Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                Spacer(minLength: 4)
-                if let chip {
-                    Text(chip)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(chipColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(chipColor.opacity(0.14)))
-                        .lineLimit(1)
-                        .fixedSize()
-                }
-            }
-            content
-        }
-        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
-        .surfaceCard(radius: 16, padding: 16)
-    }
-}
-
-private struct BigValue: View {
-    let value: String
-    let unit: String
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 3) {
-            Text(value).font(Theme.title(32)).monospacedDigit().contentTransition(.numericText())
-            Text(unit).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.secondary)
-        }
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
-    }
-}
-
-private struct Footnote: View {
-    let text: String
-
-    var body: some View {
-        Text(text).font(.system(size: 12)).foregroundStyle(Theme.secondary)
-            .lineLimit(2)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-/// A row of bars, newest on the right.
-private struct BarHistory: View {
-    let values: [Double]
-    let color: Color
-
-    var body: some View {
-        Canvas { context, size in
-            let count = 14
-            let shown = Array(values.suffix(count))
-            let gap: CGFloat = 3
-            let width = (size.width - gap * CGFloat(count - 1)) / CGFloat(count)
-            for (i, value) in shown.enumerated() {
-                let x = CGFloat(count - shown.count + i) * (width + gap)
-                let h = max(3, size.height * CGFloat(min(1, value)))
-                context.fill(Path(roundedRect: CGRect(x: x, y: size.height - h, width: width, height: h), cornerRadius: 2),
-                             with: .color(color.opacity(0.45 + 0.55 * min(1, value * 1.5))))
-            }
-        }
-        .frame(height: 30)
-        .accessibilityHidden(true)
-    }
-}
-
-/// A line (optionally filled underneath) of the recent values.
-private struct Sparkline: View {
-    let values: [Double]
-    let color: Color
-    /// The value at the top of the chart; nil scales to the largest value shown.
-    var ceiling: Double? = 1
-    var filled = false
-
-    var body: some View {
-        Canvas { context, size in
-            guard values.count > 1 else { return }
-            let top = ceiling ?? max(values.max() ?? 1, 1)
-            let step = size.width / CGFloat(values.count - 1)
-            let points = values.enumerated().map { i, value in
-                CGPoint(x: CGFloat(i) * step, y: size.height - 2 - (size.height - 4) * CGFloat(min(1, value / top)))
-            }
-            var line = Path()
-            line.addLines(points)
-            if filled {
-                var area = line
-                area.addLine(to: CGPoint(x: size.width, y: size.height))
-                area.addLine(to: CGPoint(x: 0, y: size.height))
-                area.closeSubpath()
-                context.fill(area, with: .linearGradient(Gradient(colors: [color.opacity(0.35), color.opacity(0.02)]),
-                                                         startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
-            }
-            context.stroke(line, with: .color(color), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-        }
-        .frame(height: 30)
-        .accessibilityHidden(true)
-    }
-}
-
-// MARK: - Cards
-
-private struct HealthCard: View {
+/// The score as one printed line, with the machine's particulars underneath.
+private struct HealthLine: View {
     let monitor: SystemMonitor
 
     var body: some View {
         let health = monitor.health
         let info = SystemInfo.current
-        let color = health.score >= 85 ? Page.smartClean.accent : health.score >= 70 ? Theme.warning : Theme.danger
-        StatusCard(symbol: "heart.text.square.fill", title: String(localized: "健康度"),
-                   chip: [info.chip.replacingOccurrences(of: "Apple ", with: ""), info.memory.byteString].joined(separator: " · ")) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(monitor.hasSample ? "\(health.score)" : "--").font(Theme.title(38)).contentTransition(.numericText())
-                        Text(health.label).font(.system(size: 15, weight: .semibold)).foregroundStyle(color)
-                    }
-                    Footnote(text: health.note)
-                    Spacer(minLength: 4)
-                    Footnote(text: String(localized: "已运行 \(monitor.uptime.durationText)"))
-                    Footnote(text: info.osVersion)
-                }
-                Spacer(minLength: 8)
-                ZStack {
-                    Circle().stroke(Theme.fill.opacity(0.08), lineWidth: 9)
-                    Circle()
-                        .trim(from: 0, to: Double(health.score) / 100)
-                        .stroke(color, style: StrokeStyle(lineWidth: 9, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .animation(.easeInOut(duration: 0.6), value: health.score)
-                    Image(systemName: health.score >= 85 ? "checkmark" : "exclamationmark")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(color)
-                }
-                .frame(width: 86, height: 86)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(monitor.hasSample ? "\(health.score)" : "--")
+                    .font(Theme.title(44))
+                    .contentTransition(.numericText())
+                Text([health.label, health.note].joined(separator: " · "))
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(health.score >= 70 ? Theme.primary : Theme.danger)
             }
+            Text([info.chip, info.memory.byteString, info.osVersion,
+                  String(localized: "已运行 \(monitor.uptime.durationText)")].filter { !$0.isEmpty }.joined(separator: " · "))
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.secondary)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(String(localized: "健康分 \(health.score)"))
     }
 }
 
-private struct CPUCard: View {
-    let monitor: SystemMonitor
+// MARK: - Readings
 
-    var body: some View {
-        StatusCard(symbol: "cpu", title: "CPU", chip: String(localized: "\(monitor.cores) 核")) {
-            BigValue(value: "\(Int(monitor.cpu * 100))", unit: "%")
-            BarHistory(values: monitor.cpuHistory, color: Page.smartClean.accent)
-            Footnote(text: String(localized: "\(level(monitor.cpu)) · 平均负载 \(String(format: "%.1f", monitor.load))"))
-        }
-    }
-}
-
-private struct GPUCard: View {
-    let monitor: SystemMonitor
-
-    var body: some View {
-        StatusCard(symbol: "square.stack.3d.down.forward.fill", title: "GPU") {
-            if let gpu = monitor.gpu {
-                BigValue(value: "\(Int(gpu * 100))", unit: "%")
-                Sparkline(values: monitor.gpuHistory, color: Page.status.accent)
-                Footnote(text: level(gpu))
-            } else {
-                BigValue(value: "--", unit: "%")
-                Spacer(minLength: 30)
-                Footnote(text: String(localized: "读不到 GPU 占用"))
-            }
-        }
-    }
-}
-
-private struct MemoryCard: View {
+/// Every reading on one sheet: name, figure, a thin trace of the last few seconds, and a note.
+private struct Readings: View {
     let monitor: SystemMonitor
 
     var body: some View {
         let memory = monitor.memory
-        let pressure = memory.pressure >= 4 ? (String(localized: "压力很大"), Theme.danger)
-            : memory.pressure >= 2 || memory.fraction > 0.85 ? (String(localized: "压力偏高"), Theme.warning)
-            : (String(localized: "正常"), Page.smartClean.accent)
-        StatusCard(symbol: "memorychip.fill", title: String(localized: "内存"), chip: pressure.0, chipColor: pressure.1) {
-            BigValue(value: "\(Int(memory.fraction * 100))", unit: "%")
-            Sparkline(values: monitor.memoryHistory, color: pressure.1, filled: true)
-            Footnote(text: String(localized: "\(memory.used.byteString) · 交换 \(memory.swap.byteString)"))
+        let pressured = memory.pressure >= 2 || memory.fraction > 0.85
+        let pressure = memory.pressure >= 4 ? String(localized: "压力很大") : String(localized: "压力偏高")
+        VStack(spacing: 0) {
+            ReadingRow(title: "CPU", value: "\(Int(monitor.cpu * 100))", unit: "%",
+                       note: [level(monitor.cpu), String(localized: "平均负载 \(String(format: "%.1f", monitor.load))"),
+                              String(localized: "\(monitor.cores) 核")].joined(separator: " · ")) {
+                Trace(values: monitor.cpuHistory)
+            }
+            Divider().overlay(Theme.stroke)
+            ReadingRow(title: "GPU", value: monitor.gpu.map { "\(Int($0 * 100))" } ?? "--", unit: "%",
+                       note: monitor.gpu.map(level) ?? String(localized: "读不到 GPU 占用")) {
+                Trace(values: monitor.gpuHistory)
+            }
+            Divider().overlay(Theme.stroke)
+            ReadingRow(title: String(localized: "内存"), value: "\(Int(memory.fraction * 100))", unit: "%",
+                       note: ([pressured ? pressure : nil, memory.used.byteString,
+                               String(localized: "交换 \(memory.swap.byteString)")] as [String?]).compactMap { $0 }.joined(separator: " · "),
+                       warning: pressured) {
+                Trace(values: monitor.memoryHistory)
+            }
+            Divider().overlay(Theme.stroke)
+            batteryRow
+            Divider().overlay(Theme.stroke)
+            let free = (monitor.disk?.available ?? 0).byteString.split(separator: " ")
+            ReadingRow(title: String(localized: "可用空间"), value: String(free.first ?? "--"), unit: String(free.dropFirst().first ?? ""),
+                       note: String(localized: "读 \(monitor.diskRead.rateString) · 写 \(monitor.diskWrite.rateString)")) {
+                Gauge(fraction: monitor.disk?.usedFraction ?? 0)
+            }
+            Divider().overlay(Theme.stroke)
+            let down = monitor.download.rateString.split(separator: " ")
+            ReadingRow(title: String(localized: "网络"), value: String(down.first ?? "0"), unit: down.dropFirst().joined(separator: " "),
+                       note: String(localized: "下载 · 上传 \(monitor.upload.rateString)")) {
+                Trace(values: monitor.downloadHistory, ceiling: nil)
+            }
+            Divider().overlay(Theme.stroke)
+            thermalRow
         }
+        .surfaceCard(radius: 16, padding: 8)
     }
-}
 
-private struct BatteryCard: View {
-    let monitor: SystemMonitor
-
-    var body: some View {
+    @ViewBuilder private var batteryRow: some View {
         if let battery = monitor.battery {
-            StatusCard(symbol: "battery.100percent", title: String(localized: "电池"), chip: battery.health.map { String(localized: "健康 \($0)%") }) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    BigValue(value: "\(battery.percent)", unit: "%")
-                    if battery.pluggedIn {
-                        Label(battery.adapterWatts.map { "\($0)W" } ?? String(localized: "电源"), systemImage: "bolt.fill")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Page.smartClean.accent)
-                    }
-                }
-                ProgressBar(value: Double(battery.percent) / 100,
-                            accent: battery.percent <= 20 ? Theme.danger : Page.smartClean.accent)
-                Footnote(text: [statusText(battery), battery.cycles.map { String(localized: "循环 \($0) 次") }].compactMap { $0 }.joined(separator: " · "))
+            ReadingRow(title: String(localized: "电池"), value: "\(battery.percent)", unit: "%",
+                       note: [statusText(battery), battery.cycles.map { String(localized: "循环 \($0) 次") },
+                              battery.health.map { String(localized: "健康 \($0)%") }].compactMap { $0 }.joined(separator: " · "),
+                       warning: battery.percent <= 20 && !battery.pluggedIn) {
+                Gauge(fraction: Double(battery.percent) / 100)
             }
         } else {
-            StatusCard(symbol: "powerplug.fill", title: String(localized: "电源")) {
-                BigValue(value: String(localized: "外接"), unit: String(localized: "电源"))
-                Spacer(minLength: 20)
-                Footnote(text: String(localized: "这台 Mac 没有电池"))
+            ReadingRow(title: String(localized: "电源"), value: String(localized: "外接"), unit: "",
+                       note: String(localized: "这台 Mac 没有电池")) { Color.clear }
+        }
+    }
+
+    private var thermalRow: some View {
+        let (label, step): (String, Int) = switch monitor.thermal {
+        case .nominal: (String(localized: "正常"), 1)
+        case .fair: (String(localized: "偏热"), 2)
+        case .serious: (String(localized: "很热"), 3)
+        case .critical: (String(localized: "过热"), 4)
+        @unknown default: (String(localized: "未知"), 1)
+        }
+        return ReadingRow(title: String(localized: "温度"), value: label, unit: "",
+                          note: String(localized: "macOS 报告的散热状态"), warning: step >= 3) {
+            HStack(spacing: 3) {
+                ForEach(1...4, id: \.self) { i in
+                    Rectangle().fill(i <= step ? Theme.primary : Theme.raised).frame(height: 6)
+                }
             }
         }
     }
@@ -278,53 +146,81 @@ private struct BatteryCard: View {
     }
 }
 
-private struct DiskCard: View {
-    let monitor: SystemMonitor
+private struct ReadingRow<Trace: View>: View {
+    let title: String
+    let value: String
+    let unit: String
+    let note: String
+    var warning = false
+    @ViewBuilder let trace: Trace
 
     var body: some View {
-        StatusCard(symbol: "internaldrive.fill", title: String(localized: "可用空间"), chip: monitor.disk.map { String(format: "%.0f GB", Double($0.total) / 1_000_000_000) }) {
-            let parts = (monitor.disk?.available ?? 0).byteString.split(separator: " ")
-            BigValue(value: String(parts.first ?? "--"), unit: String(parts.last ?? ""))
-            ProgressBar(value: monitor.disk?.usedFraction ?? 0, accent: Theme.chart)
-            Footnote(text: String(localized: "读 \(monitor.diskRead.rateString) · 写 \(monitor.diskWrite.rateString)"))
-        }
-    }
-}
-
-private struct NetworkCard: View {
-    let monitor: SystemMonitor
-
-    var body: some View {
-        StatusCard(symbol: "network", title: String(localized: "网络")) {
-            let parts = monitor.download.rateString.split(separator: " ")
-            BigValue(value: String(parts.first ?? "0"), unit: parts.dropFirst().joined(separator: " "))
-            Sparkline(values: monitor.downloadHistory, color: Theme.chart, ceiling: nil)
-            Footnote(text: String(localized: "下载 · 上传 \(monitor.upload.rateString)"))
-        }
-    }
-}
-
-private struct ThermalCard: View {
-    let monitor: SystemMonitor
-
-    var body: some View {
-        let (label, color, step): (String, Color, Int) = switch monitor.thermal {
-        case .nominal: (String(localized: "正常"), Page.smartClean.accent, 1)
-        case .fair: (String(localized: "偏热"), Theme.warning, 2)
-        case .serious: (String(localized: "很热"), Theme.warning, 3)
-        case .critical: (String(localized: "过热"), Theme.danger, 4)
-        @unknown default: (String(localized: "未知"), Theme.secondary, 1)
-        }
-        StatusCard(symbol: "thermometer.medium", title: String(localized: "温度"), chip: label, chipColor: color) {
-            BigValue(value: label, unit: "")
-            HStack(spacing: 4) {
-                ForEach(1...4, id: \.self) { i in
-                    Capsule().fill(i <= step ? color : Theme.fill.opacity(0.08)).frame(height: 8)
-                }
+        HStack(spacing: 20) {
+            Text(title)
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.secondary)
+                .frame(width: 84, alignment: .leading)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(value).font(Theme.figures(22, weight: .medium)).contentTransition(.numericText())
+                Text(unit).font(.system(size: 12)).foregroundStyle(Theme.secondary)
             }
-            .padding(.vertical, 11)
-            Footnote(text: String(localized: "macOS 报告的散热状态"))
+            .lineLimit(1)
+            .frame(width: 150, alignment: .leading)
+            trace
+                .frame(width: 180, height: 22)
+            Text(note)
+                .font(.system(size: 12))
+                .foregroundStyle(warning ? Theme.warning : Theme.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
+        .padding(.horizontal, 12)
+        .frame(height: 52)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title) \(value)\(unit)")
+        .accessibilityValue(note)
+    }
+}
+
+/// A thin ink line of the recent values, newest on the right.
+private struct Trace: View {
+    let values: [Double]
+    /// The value at the top; nil scales to the largest value shown.
+    var ceiling: Double? = 1
+
+    var body: some View {
+        Canvas { context, size in
+            var base = Path()
+            base.move(to: CGPoint(x: 0, y: size.height - 0.5))
+            base.addLine(to: CGPoint(x: size.width, y: size.height - 0.5))
+            context.stroke(base, with: .color(Theme.stroke), lineWidth: 1)
+            guard values.count > 1 else { return }
+            let top = ceiling ?? max(values.max() ?? 1, 1)
+            let step = size.width / CGFloat(values.count - 1)
+            var line = Path()
+            line.addLines(values.enumerated().map { i, value in
+                CGPoint(x: CGFloat(i) * step, y: size.height - 1 - (size.height - 3) * CGFloat(min(1, value / top)))
+            })
+            context.stroke(line, with: .color(Theme.primary), style: StrokeStyle(lineWidth: 1.4, lineJoin: .round))
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// How full something is, as a flat ink bar.
+private struct Gauge: View {
+    let fraction: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle().fill(Theme.raised)
+                Rectangle().fill(Theme.primary).frame(width: geo.size.width * min(1, max(0, fraction)))
+            }
+        }
+        .frame(height: 6)
+        .accessibilityHidden(true)
     }
 }
 

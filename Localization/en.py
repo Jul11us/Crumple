@@ -377,6 +377,8 @@ EN = {
     # Sidebar
     "可用 %@ · 共 %@": "%@ free of %@",
     "可用 · 共 %@": "free of %@",
+    "交换 %@": "swap %@",
+    "平均负载 %@": "load average %@",
     "已使用 %lld%%": "%lld%% used",
     "把垃圾揉成纸团": "Crumple up the junk",
     "清倒 %@": "Empty %@",
