@@ -258,10 +258,10 @@ struct BasketStyle {
 
     /// Charcoal wire, like the hoop in the logo (pale wire on dark paper).
     static let app = BasketStyle(
-        rim: Color.adaptive(light: 0x2A2824, dark: 0xD8D1C2),
-        slat: Color.adaptive(light: 0x3A3732, dark: 0xBDB5A5),
-        wall: Color.adaptive(light: 0x4A4640, dark: 0xA39B8B),
-        interior: Color.adaptive(light: 0x1E1C19, dark: 0x0F0E0D),
+        rim: .themed(\.basketRim),
+        slat: .themed(\.basketSlat),
+        wall: .themed(\.basketWall),
+        interior: .themed(\.basketInside),
         shadow: 0.14
     )
     static let icon = BasketStyle(

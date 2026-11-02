@@ -14,7 +14,8 @@ enum DevTools {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let model = AppModel()
         let variants: [(String, ColorScheme, CGFloat, CGFloat)] = [
-            ("light", .light, 1180, 780),
+            ("mist", .light, 1180, 780),
+            ("kraft", .light, 1180, 780),
             ("dark-compact", .dark, 1100, 720),
         ]
         func render(_ page: Page, _ name: String, _ scheme: ColorScheme, _ width: CGFloat, _ height: CGFloat) {
@@ -38,6 +39,7 @@ enum DevTools {
             writeInterfacePNG(view, width: width, height: height, to: dir.appendingPathComponent("\(name).png"))
         }
         for (name, scheme, width, height) in variants {
+            Palette.light = name == "kraft" ? .kraft : .mist
             for page in [Page.overview, .smartClean, .largeFiles, .duplicates, .uninstaller] {
                 render(page, "\(page.rawValue)-\(name)", scheme, width, height)
             }
@@ -55,11 +57,12 @@ enum DevTools {
             pump(0.6)
         }
         for (name, scheme, width, height) in variants {
+            Palette.light = name == "kraft" ? .kraft : .mist
             model.startSmartScan(); wait { model.smartPhase == .results }
             render(.smartClean, "smartClean-results-\(name)", scheme, width, height)
             model.openReview(); pump(0.6)
             render(.smartClean, "smartClean-review-\(name)", scheme, width, height)
-            if name == "light" {
+            if name == "mist" {
                 model.requestSmartClean(); wait { model.smartPhase == .done }; pump(1.6)
                 render(.smartClean, "smartClean-done-\(name)", scheme, width, height)
                 model.finishSmartClean()

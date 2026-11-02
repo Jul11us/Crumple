@@ -5,19 +5,20 @@ import AppKit
 
 enum Theme {
     // The logo's own palette: cream paper and charcoal ink. Ink is also the one action colour.
-    static let base = Color.adaptive(light: 0xF7F3EA, dark: 0x1C1B19)
-    static let sidebar = Color.adaptive(light: 0xEFE9DD, dark: 0x171614)
-    static let primary = Color.adaptive(light: 0x26241F, dark: 0xEDE7DA)
-    static let secondary = Color.adaptive(light: 0x5F5B52, dark: 0xB5AE9F)
-    static let tertiary = Color.adaptive(light: 0x7A7568, dark: 0x948D7F)
-    static let card = Color.adaptive(light: 0xFFFCF5, dark: 0x24231F)
-    static let raised = Color.adaptive(light: 0xE8E1D3, dark: 0x312F2A)
-    static let accent = Color.adaptive(light: 0x26241F, dark: 0xEDE7DA)
-    static let onAccent = Color.adaptive(light: 0xF7F3EA, dark: 0x1C1B19)
-    static let accentSurface = Color.adaptive(light: 0xEDE6D8, dark: 0x2C2A25)
-    static let warning = Color.adaptive(light: 0x996324, dark: 0xDBB477)
-    static let danger = Color.adaptive(light: 0xAA413B, dark: 0xE99C92)
-    static let chart = Color.adaptive(light: 0x8C8577, dark: 0x8C8577)
+    // Every colour comes from the chosen theme (雾灰, 牛皮纸 or 深色), see `Palette`.
+    static let base = Color.themed(\.base)
+    static let sidebar = Color.themed(\.sidebar)
+    static let primary = Color.themed(\.primary)
+    static let secondary = Color.themed(\.secondary)
+    static let tertiary = Color.themed(\.tertiary)
+    static let card = Color.themed(\.card)
+    static let raised = Color.themed(\.raised)
+    static let accent = Color.themed(\.accent)
+    static let onAccent = Color.themed(\.onAccent)
+    static let accentSurface = Color.themed(\.accentSurface)
+    static let warning = Color.themed(\.warning)
+    static let danger = Color.themed(\.danger)
+    static let chart = Color.themed(\.tertiary)
     static let stroke = primary.opacity(0.09)
     static let fill = primary
     static let sidebarWidth: CGFloat = 240

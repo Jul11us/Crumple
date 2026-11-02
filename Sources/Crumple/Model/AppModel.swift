@@ -179,6 +179,7 @@ final class AppModel {
     var appearance: AppAppearance {
         didSet {
             UserDefaults.standard.set(appearance.rawValue, forKey: "appearance")
+            Palette.light = appearance.lightPalette
             NSApp?.appearance = appearance.nsAppearance
         }
     }
@@ -239,7 +240,9 @@ final class AppModel {
     init() {
         junk = CategoryKind.junk.map { CleanCategory(kind: $0) }
         let defaults = UserDefaults.standard
-        appearance = AppAppearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .light
+        let savedAppearance = AppAppearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .mist
+        appearance = savedAppearance
+        Palette.light = savedAppearance.lightPalette
         let savedLanguage = AppLanguage(rawValue: defaults.string(forKey: "appLanguage") ?? "") ?? .system
         language = savedLanguage
         launchLanguage = savedLanguage

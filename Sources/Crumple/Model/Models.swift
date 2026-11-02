@@ -14,6 +14,17 @@ extension Color {
         })
     }
 
+    /// A colour from the current theme. It's looked up when drawn, so switching themes repaints everything.
+    static func themed(_ key: KeyPath<Palette, UInt32>, opacity: Double = 1) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let palette = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? Palette.dark : Palette.light
+            let hex = palette[keyPath: key]
+            return NSColor(srgbRed: Double((hex >> 16) & 0xFF) / 255,
+                           green: Double((hex >> 8) & 0xFF) / 255,
+                           blue: Double(hex & 0xFF) / 255, alpha: opacity)
+        })
+    }
+
     init(hex: UInt32, opacity: Double = 1) {
         self.init(
             red: Double((hex >> 16) & 0xFF) / 255,
@@ -24,31 +35,71 @@ extension Color {
     }
 }
 
+/// Every colour of one theme.
+struct Palette {
+    var base: UInt32, sidebar: UInt32, card: UInt32, raised: UInt32
+    var primary: UInt32, secondary: UInt32, tertiary: UInt32
+    var accent: UInt32, onAccent: UInt32, accentSurface: UInt32
+    var warning: UInt32, danger: UInt32
+    var basketRim: UInt32, basketSlat: UInt32, basketWall: UInt32, basketInside: UInt32
+
+    /// Cool grey with a slate-blue button: quiet, a little like stationery from a museum shop.
+    static let mist = Palette(
+        base: 0xF1F1EE, sidebar: 0xE7E7E3, card: 0xF8F8F6, raised: 0xDCDCD8,
+        primary: 0x2B2D30, secondary: 0x5F6267, tertiary: 0x7D8085,
+        accent: 0x3E5568, onAccent: 0xF4F4F1, accentSurface: 0xE3E6E9,
+        warning: 0x94661C, danger: 0xA5403A,
+        basketRim: 0x2B2D30, basketSlat: 0x3B3E42, basketWall: 0x4B4F54, basketInside: 0x1C1D1F)
+
+    /// Kraft paper with dark brown ink: warmer, more hand-made.
+    static let kraft = Palette(
+        base: 0xE9E3D9, sidebar: 0xDFD7CA, card: 0xF0EBE3, raised: 0xD3C9BA,
+        primary: 0x33291F, secondary: 0x66594C, tertiary: 0x85776A,
+        accent: 0x33291F, onAccent: 0xEFE9E0, accentSurface: 0xDDD3C4,
+        warning: 0x8A5A18, danger: 0x9C3A2B,
+        basketRim: 0x3A2F25, basketSlat: 0x4A3D31, basketWall: 0x5A4B3D, basketInside: 0x231C15)
+
+    /// Close to the system's own dark mode, with almost no colour of its own.
+    static let dark = Palette(
+        base: 0x1C1C1E, sidebar: 0x161618, card: 0x242426, raised: 0x333336,
+        primary: 0xF2F2F2, secondary: 0xAEAEB2, tertiary: 0x8E8E93,
+        accent: 0xF2F2F2, onAccent: 0x1C1C1E, accentSurface: 0x2A2A2D,
+        warning: 0xE0B060, danger: 0xF08A7E,
+        basketRim: 0xD9D9DC, basketSlat: 0xBDBDC1, basketWall: 0xA3A3A8, basketInside: 0x0E0E0F)
+
+    /// The light theme in use; dark always uses `dark`. Only written on the main thread.
+    nonisolated(unsafe) static var light = mist
+}
+
 enum AppAppearance: String, CaseIterable, Identifiable {
-    case system, light, dark
+    // "light" keeps its stored name so an earlier "浅色" choice opens as 雾灰.
+    case system, mist = "light", kraft, dark
 
     var id: String { rawValue }
     var title: String {
         switch self {
         case .system: String(localized: "跟随系统")
-        case .light: String(localized: "浅色")
+        case .mist: String(localized: "雾灰")
+        case .kraft: String(localized: "牛皮纸")
         case .dark: String(localized: "深色")
         }
     }
     var colorScheme: ColorScheme? {
         switch self {
         case .system: nil
-        case .light: .light
+        case .mist, .kraft: .light
         case .dark: .dark
         }
     }
     var nsAppearance: NSAppearance? {
         switch self {
         case .system: nil
-        case .light: NSAppearance(named: .aqua)
+        case .mist, .kraft: NSAppearance(named: .aqua)
         case .dark: NSAppearance(named: .darkAqua)
         }
     }
+    /// The palette used whenever this choice shows light: kraft only when chosen, otherwise mist.
+    var lightPalette: Palette { self == .kraft ? .kraft : .mist }
 }
 
 enum AppLanguage: String, CaseIterable, Identifiable {
@@ -221,11 +272,11 @@ enum CategoryKind: String, CaseIterable, Identifiable {
         switch self {
         case .appCaches: Theme.accent
         // Shades of the same ink, from dark to pale, so the chart reads like a printed graph.
-        case .logs: .adaptive(light: 0x55514A, dark: 0xBDB6A8)
-        case .xcode: .adaptive(light: 0x7D786E, dark: 0x9A9384)
-        case .devCaches: .adaptive(light: 0xA19B8F, dark: 0x787264)
-        case .installers: .adaptive(light: 0xC2BCB0, dark: 0x5A554B)
-        case .oldDownloads: .adaptive(light: 0xDCD6CA, dark: 0x443F37)
+        case .logs: Theme.primary.opacity(0.72)
+        case .xcode: Theme.primary.opacity(0.52)
+        case .devCaches: Theme.primary.opacity(0.36)
+        case .installers: Theme.primary.opacity(0.24)
+        case .oldDownloads: Theme.primary.opacity(0.14)
         default: Theme.chart
         }
     }
