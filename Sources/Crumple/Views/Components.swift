@@ -4,26 +4,32 @@ import AppKit
 // MARK: - Design tokens
 
 enum Theme {
-    static let base = Color.adaptive(light: 0xFAF9F6, dark: 0x1D1E1B)
-    static let sidebar = Color.adaptive(light: 0xF1F0EC, dark: 0x181916)
-    static let primary = Color.adaptive(light: 0x272923, dark: 0xECEEE7)
-    static let secondary = Color.adaptive(light: 0x606359, dark: 0xB2B6AA)
-    static let tertiary = Color.adaptive(light: 0x73766C, dark: 0x979C8E)
-    static let card = Color.adaptive(light: 0xFFFFFF, dark: 0x252722)
-    static let raised = Color.adaptive(light: 0xE9EBE4, dark: 0x33362E)
-    static let accent = Color.adaptive(light: 0x4F6848, dark: 0xB7CDAA)
-    static let onAccent = Color.adaptive(light: 0xFFFFFF, dark: 0x1D1E1B)
-    static let accentSurface = Color.adaptive(light: 0xEEF1E9, dark: 0x2B3226)
+    // The logo's own palette: cream paper and charcoal ink. Ink is also the one action colour.
+    static let base = Color.adaptive(light: 0xF7F3EA, dark: 0x1C1B19)
+    static let sidebar = Color.adaptive(light: 0xEFE9DD, dark: 0x171614)
+    static let primary = Color.adaptive(light: 0x26241F, dark: 0xEDE7DA)
+    static let secondary = Color.adaptive(light: 0x5F5B52, dark: 0xB5AE9F)
+    static let tertiary = Color.adaptive(light: 0x7A7568, dark: 0x948D7F)
+    static let card = Color.adaptive(light: 0xFFFCF5, dark: 0x24231F)
+    static let raised = Color.adaptive(light: 0xE8E1D3, dark: 0x312F2A)
+    static let accent = Color.adaptive(light: 0x26241F, dark: 0xEDE7DA)
+    static let onAccent = Color.adaptive(light: 0xF7F3EA, dark: 0x1C1B19)
+    static let accentSurface = Color.adaptive(light: 0xEDE6D8, dark: 0x2C2A25)
     static let warning = Color.adaptive(light: 0x996324, dark: 0xDBB477)
     static let danger = Color.adaptive(light: 0xAA413B, dark: 0xE99C92)
-    static let chart = Color.adaptive(light: 0x747F6A, dark: 0x8A9B7D)
+    static let chart = Color.adaptive(light: 0x8C8577, dark: 0x8C8577)
     static let stroke = primary.opacity(0.09)
     static let fill = primary
     static let sidebarWidth: CGFloat = 240
     static let feedback = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.16)
     static let pageTransition = Animation.timingCurve(0.22, 1, 0.36, 1, duration: 0.28)
 
-    static func title(_ size: CGFloat) -> Font { .system(size: size, weight: .medium) }
+    /// Titles are set in the serif, like a printed page; everything else stays in the system font.
+    static func title(_ size: CGFloat) -> Font { .system(size: size, weight: .semibold, design: .serif) }
+    /// Sizes and counts read like a receipt.
+    static func figures(_ size: CGFloat, weight: Font.Weight = .medium) -> Font {
+        .system(size: size, weight: weight, design: .monospaced)
+    }
 }
 
 /// A quiet paper surface leaves the emphasis to the content.
@@ -412,7 +418,6 @@ struct LandingView<Footer: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(page.title).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.secondary)
             Spacer(minLength: 40)
             HStack(alignment: .center, spacing: 32) {
                 VStack(alignment: .leading, spacing: 24) {
@@ -425,17 +430,11 @@ struct LandingView<Footer: View>: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if !chips.isEmpty {
-                        LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)],
-                                  alignment: .leading, spacing: 16) {
-                            ForEach(chips, id: \.1) { FeatureChip(symbol: $0.0, title: $0.1) }
-                        }
+                        Text(chips.map(\.1).joined(separator: "  ·  "))
+                            .font(.system(size: 13))
+                            .foregroundStyle(Theme.tertiary)
                     }
-                    Button(action: action) {
-                        HStack(spacing: 24) {
-                            Text(buttonTitle)
-                            Image(systemName: "arrow.right")
-                        }
-                    }
+                    Button(buttonTitle, action: action)
                     .buttonStyle(PrimaryButtonStyle(accent: page.accent, large: true))
                     footer
                         .font(.system(size: 12))

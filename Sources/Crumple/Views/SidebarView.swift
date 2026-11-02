@@ -48,7 +48,6 @@ struct SidebarView: View {
                         Image(systemName: "gearshape").frame(width: 20)
                         Text("设置")
                         Spacer()
-                        Keycap(text: "⌘ ,")
                     }
                     .frame(height: 32)
                     .contentShape(Rectangle())

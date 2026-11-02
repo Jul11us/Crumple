@@ -376,6 +376,8 @@ EN = {
 
     # Sidebar
     "可用 %@ · 共 %@": "%@ free of %@",
+    "可用 · 共 %@": "free of %@",
+    "已使用 %lld%%": "%lld%% used",
     "把垃圾揉成纸团": "Crumple up the junk",
     "清倒 %@": "Empty %@",
     "清倒废纸篓，真正释放空间": "Empty the Trash to actually free the space",
