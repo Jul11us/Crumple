@@ -48,5 +48,7 @@ rm -rf "$APP"
 mv "$STAGE" "$APP"
 rm -rf build/.staging
 touch "$APP"
-"$LSREGISTER" -f "$APP" >/dev/null 2>&1 || true
+# Don't let macOS treat the build output as an installed app: with two copies of the same app,
+# Launch Services may disable the one in /Applications and it drops out of the app grid.
+"$LSREGISTER" -u "$APP" >/dev/null 2>&1 || true
 echo "Built: $APP ($(lipo -archs "$APP/Contents/MacOS/Crumple"))"

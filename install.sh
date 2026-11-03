@@ -13,5 +13,11 @@ fi
 rm -rf /Applications/Crumple.app
 ditto "$APP" /Applications/Crumple.app
 touch /Applications/Crumple.app
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f /Applications/Crumple.app >/dev/null 2>&1 || true
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+# Only the installed copy should be registered; build and packaging copies would compete with it.
+for copy in "$PWD/build/Crumple.app" "$PWD/build/dmg-staging/Crumple.app" "$PWD/build/.staging/Crumple.app"; do
+    "$LSREGISTER" -u "$copy" >/dev/null 2>&1 || true
+done
+"$LSREGISTER" -f -R -trusted /Applications/Crumple.app >/dev/null 2>&1 || true
+mdimport /Applications/Crumple.app >/dev/null 2>&1 || true
 echo "Installed: /Applications/Crumple.app"

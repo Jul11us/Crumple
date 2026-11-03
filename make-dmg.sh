@@ -99,5 +99,10 @@ for attempt in 1 2 3 4 5; do
     sleep 2
 done
 quiet hdiutil convert "$RW" -format UDZO -imagekey zlib-level=9 -o "$DMG" >/dev/null
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+# The copies used while laying out the disk got registered as apps; forget them again.
+"$LSREGISTER" -u "$STAGING/Crumple.app" >/dev/null 2>&1 || true
+"$LSREGISTER" -u "$MOUNT/Crumple.app" >/dev/null 2>&1 || true
 rm -rf "$RW" "$STAGING"
+"$LSREGISTER" -f /Applications/Crumple.app >/dev/null 2>&1 || true
 echo "Built: $DMG ($(du -h "$DMG" | cut -f1))"
