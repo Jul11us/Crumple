@@ -38,6 +38,6 @@
 
 ## 验证入口
 
-`swift test` 检查现有安全与扫描行为；`bash build.sh` 同时构建 arm64、x86_64 并提取本地化资源；`bash Localization/verify.sh` 检查中英文资源。
+`swift test` 检查现有安全与扫描行为；`bash scripts/build.sh` 同时构建 arm64、x86_64 并提取本地化资源；`bash Localization/verify.sh` 检查中英文资源。
 
 `--render-interface` 仅在 `CRUMPLE_DEMO_HOME` 模式下工作，通过未显示的原生宿主窗口渲染实际 SwiftUI 视图，包含 ScrollView。输出浅色 1180×780 与深色 1100×720 的概览、智能清理、大文件、重复文件和应用卸载预览。

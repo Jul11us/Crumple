@@ -64,14 +64,14 @@ Requires **macOS 14 or later** and Apple's **Command Line Tools**. The build use
 ```bash
 git clone https://github.com/Jul11us/Crumple.git
 cd Crumple
-bash build.sh
+bash scripts/build.sh
 open build/Crumple.app
 ```
 
 The build produces a universal app for **Apple silicon and Intel**. To install it in Applications:
 
 ```bash
-bash install.sh
+bash scripts/install.sh
 ```
 
 ### Try the paper first
@@ -86,10 +86,10 @@ CRUMPLE_DEMO_HOME=/tmp/crumple-demo \
 ### Package a disk image
 
 ```bash
-bash make-dmg.sh
+bash scripts/make-dmg.sh
 ```
 
-This creates `build/Crumple <version>.dmg`. Builds are ad hoc signed by default; distribution with Developer ID signing and Apple notarization is supported through `notarize.sh` and requires a developer account. The current default build is not notarized.
+This creates `build/releases/Crumple <version>.dmg`. Builds are ad hoc signed by default; distribution with Developer ID signing and Apple notarization is supported through `scripts/notarize.sh` and requires a developer account. The current default build is not notarized.
 
 ## Under the paper
 
@@ -100,13 +100,13 @@ swift test
 bash Localization/verify.sh
 ```
 
-The tests cover cleanup boundaries, symbolic links, restoration, duplicate detection, and throw outcomes. Localization checks validate the built app's Chinese and English resources; run `bash build.sh` first.
+The tests cover cleanup boundaries, symbolic links, restoration, duplicate detection, and throw outcomes. Localization checks validate the built app's Chinese and English resources; run `bash scripts/build.sh` first.
 
-For rendering previews, inspecting scans, and working on the app, see the [development guide](docs/DEVELOPMENT.zh-CN.md). Verification notes are in [`VALIDATION.md`](VALIDATION.md).
+For rendering previews, inspecting scans, and working on the app, see the [development guide](docs/DEVELOPMENT.zh-CN.md). Verification notes are in [`VALIDATION.md`](docs/VALIDATION.md).
 
 ## Design notes
 
-Crumple's identity comes from paper, a basket, and the pleasure of a small, deliberate action. The interface review drew on [unslop by Damir Sokolovsky](https://github.com/heydamir/unslop), used under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Adaptation notes and attribution are recorded in [UI direction](design/UI-DIRECTION.md).
+Crumple's identity comes from paper, a basket, and the pleasure of a small, deliberate action. The interface review drew on [unslop by Damir Sokolovsky](https://github.com/heydamir/unslop), used under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Adaptation notes and attribution are recorded in [UI direction](docs/UI-DIRECTION.md).
 
 <br>
 

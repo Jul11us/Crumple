@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds, signs with your Developer ID, notarizes and staples "build/Crumple <version>.dmg",
+# Builds, signs with your Developer ID, notarizes and staples "build/releases/Crumple <version>.dmg",
 # so it opens on other Macs without a Gatekeeper warning.
 #
 # One-time setup (needs a paid Apple Developer account):
@@ -8,10 +8,10 @@
 #        xcrun notarytool store-credentials crumple --apple-id you@example.com --team-id ABCDE12345
 #
 # Then:
-#   CRUMPLE_SIGN_ID="Developer ID Application: Your Name (ABCDE12345)" bash ./notarize.sh
+#   CRUMPLE_SIGN_ID="Developer ID Application: Your Name (ABCDE12345)" bash scripts/notarize.sh
 #   (CRUMPLE_NOTARY_PROFILE defaults to "crumple")
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 : "${CRUMPLE_SIGN_ID:?Set CRUMPLE_SIGN_ID to your \"Developer ID Application: …\" identity (see the top of this file).}"
 PROFILE="${CRUMPLE_NOTARY_PROFILE:-crumple}"
@@ -23,12 +23,12 @@ if ! security find-identity -v -p codesigning | grep -qF "$CRUMPLE_SIGN_ID"; the
     exit 1
 fi
 
-CRUMPLE_SIGN_ID="$CRUMPLE_SIGN_ID" bash ./build.sh release
+CRUMPLE_SIGN_ID="$CRUMPLE_SIGN_ID" bash scripts/build.sh release
 codesign --verify --strict --deep "build/Crumple.app"
 
-bash ./make-dmg.sh
+bash scripts/make-dmg.sh
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "build/Crumple.app/Contents/Info.plist")
-DMG="build/Crumple $VERSION.dmg"
+DMG="build/releases/Crumple $VERSION.dmg"
 codesign --force --timestamp --sign "$CRUMPLE_SIGN_ID" "$DMG"
 
 echo "上传公证，通常要几分钟…"

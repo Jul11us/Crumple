@@ -2,10 +2,10 @@
 # Copies build/Crumple.app into /Applications (replacing an older copy) so it shows up
 # in Finder, Launchpad and Spotlight with its icon. Builds it first if needed.
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 APP="build/Crumple.app"
-[ -d "$APP" ] || bash ./build.sh
+[ -d "$APP" ] || bash scripts/build.sh
 if pgrep -xq Crumple; then
     echo "Crumple 正在运行，先退出它再安装。" >&2
     exit 1

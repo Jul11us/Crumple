@@ -33,22 +33,22 @@
 只需要 Command Line Tools（不需要完整 Xcode）：
 
 ```bash
-bash build.sh
+bash scripts/build.sh
 ```
 
 生成 `build/Crumple.app`（通用版，Apple 芯片和 Intel 都能运行）。装进「应用程序」文件夹，这样访达、启动台和聚焦里都能找到它：
 
 ```bash
-bash install.sh
+bash scripts/install.sh
 ```
 
 ## 打包成 DMG
 
 ```bash
-bash make-dmg.sh
+bash scripts/make-dmg.sh
 ```
 
-生成 `build/Crumple <版本>.dmg`：打开后是带背景图的安装窗口，把应用拖到 Applications 即可安装。第一次运行时 macOS 可能会询问是否允许控制「访达」（用来排版窗口），不允许也能打包，只是没有背景图。
+生成 `build/releases/Crumple <版本>.dmg`：打开后是带背景图的安装窗口，把应用拖到 Applications 即可安装。第一次运行时 macOS 可能会询问是否允许控制「访达」（用来排版窗口），不允许也能打包，只是没有背景图。
 
 这个 DMG 只做了本机临时签名，没有经过 Apple 公证。自己用没问题；发给别人时，对方第一次打开需要右键点应用 →「打开」，或在「系统设置 › 隐私与安全性」里点「仍要打开」。要让别人直接双击就能打开，需要 Apple 开发者账号（Developer ID）签名并公证。
 
@@ -69,7 +69,7 @@ swift test
 bash Localization/verify.sh
 ```
 
-`build.sh` 会让 Swift 编译器提取界面文案，再通过 `Localization/en.py` 生成中英文资源；遇到缺失翻译或插值参数不匹配会停止构建。资源检查需要先构建应用。
+`scripts/build.sh` 会让 Swift 编译器提取界面文案，再通过 `Localization/en.py` 生成中英文资源；遇到缺失翻译或插值参数不匹配会停止构建。资源检查需要先构建应用。
 
 ```bash
 # 只读扫描报告（不删除任何东西，跳过“下载”文件夹）
@@ -85,7 +85,7 @@ CRUMPLE_DEMO_HOME=/tmp/crumple-ui "build/Crumple.app/Contents/MacOS/Crumple" --r
 "build/Crumple.app/Contents/MacOS/Crumple" --render-splash design
 
 # 所有 logo 方案和对比图（图标定稿是 H：篮球框 · 米白墨黑）
-"build/Crumple.app/Contents/MacOS/Crumple" --render-logos design
+"build/Crumple.app/Contents/MacOS/Crumple" --render-logos design/logo-explorations
 ```
 
 ## 代码结构
@@ -98,4 +98,4 @@ CRUMPLE_DEMO_HOME=/tmp/crumple-ui "build/Crumple.app/Contents/MacOS/Crumple" --r
 
 ## 界面设计
 
-界面采用浅纸色背景、墨色文字、单一灰绿色强调色，以及统一的线性图标与细分隔线。设计审查与调整参考 Damir Sokolovsky 的 [unslop](https://github.com/heydamir/unslop)（[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)）；方向与逐项记录见 [design/UI-DIRECTION.md](../design/UI-DIRECTION.md)。
+界面采用纸张和墨色的风格，提供雾灰、牛皮纸、深色三种主题；标题用衬线体，数字用等宽字体，列表像小票一样用点线连接。设计审查与调整参考 Damir Sokolovsky 的 [unslop](https://github.com/heydamir/unslop)（[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)）；方向与逐项记录见 [UI-DIRECTION.md](UI-DIRECTION.md)。

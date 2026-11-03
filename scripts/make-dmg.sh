@@ -1,15 +1,16 @@
 #!/bin/bash
-# Packs the app into a drag-to-install disk image: "build/Crumple <version>.dmg".
+# Packs the app into a drag-to-install disk image: "build/releases/Crumple <version>.dmg".
 # Builds the app first if needed. Laying out the window asks Finder for help, so the
 # first run may show a macOS prompt to allow controlling Finder.
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 APP="build/Crumple.app"
-[ -d "$APP" ] || bash ./build.sh
+[ -d "$APP" ] || bash scripts/build.sh
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Contents/Info.plist")
 VOLNAME="Crumple"
-DMG="build/Crumple $VERSION.dmg"
+mkdir -p build/releases
+DMG="build/releases/Crumple $VERSION.dmg"
 STAGING="build/dmg-staging"
 RW="build/dmg-rw.dmg"
 
@@ -103,6 +104,7 @@ LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchSe
 # The copies used while laying out the disk got registered as apps; forget them again.
 "$LSREGISTER" -u "$STAGING/Crumple.app" >/dev/null 2>&1 || true
 "$LSREGISTER" -u "$MOUNT/Crumple.app" >/dev/null 2>&1 || true
+"$LSREGISTER" -u "$PWD/$APP" >/dev/null 2>&1 || true
 rm -rf "$RW" "$STAGING"
 "$LSREGISTER" -f /Applications/Crumple.app >/dev/null 2>&1 || true
 echo "Built: $DMG ($(du -h "$DMG" | cut -f1))"

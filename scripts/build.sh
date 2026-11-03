@@ -1,10 +1,10 @@
 #!/bin/bash
 # Builds "build/Crumple.app" as a universal app (Apple silicon + Intel).
-# Usage: ./build.sh [release|debug]
+# Usage: bash scripts/build.sh [release|debug]
 # Signs ad hoc by default. Set CRUMPLE_SIGN_ID to a "Developer ID Application: …" identity to sign
 # for distribution (hardened runtime, secure timestamp); notarize.sh does that for you.
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 CONFIG="${1:-release}"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister

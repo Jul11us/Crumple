@@ -64,14 +64,14 @@ Crumple 把一个熟悉的小动作，带回日常的 Mac 整理。拖起文件�
 ```bash
 git clone https://github.com/Jul11us/Crumple.git
 cd Crumple
-bash build.sh
+bash scripts/build.sh
 open build/Crumple.app
 ```
 
 生成的应用同时支持 **Apple 芯片和 Intel**。安装到「应用程序」文件夹：
 
 ```bash
-bash install.sh
+bash scripts/install.sh
 ```
 
 ### 先投一个纸团
@@ -86,10 +86,10 @@ CRUMPLE_DEMO_HOME=/tmp/crumple-demo \
 ### 打包安装镜像
 
 ```bash
-bash make-dmg.sh
+bash scripts/make-dmg.sh
 ```
 
-生成 `build/Crumple <版本>.dmg`。默认采用本机临时签名，当前默认构建未经 Apple 公证。面向分发的 Developer ID 签名与公证流程由 `notarize.sh` 提供，需要 Apple 开发者账号。
+生成 `build/releases/Crumple <版本>.dmg`。默认采用本机临时签名，当前默认构建未经 Apple 公证。面向分发的 Developer ID 签名与公证流程由 `scripts/notarize.sh` 提供，需要 Apple 开发者账号。
 
 ## 纸张背后
 
@@ -100,13 +100,13 @@ swift test
 bash Localization/verify.sh
 ```
 
-测试覆盖清理路径边界、符号链接、文件恢复、重复文件比对与投掷判定。本地化检查验证打包后的中英文资源，执行前需先运行 `bash build.sh`。
+测试覆盖清理路径边界、符号链接、文件恢复、重复文件比对与投掷判定。本地化检查验证打包后的中英文资源，执行前需先运行 `bash scripts/build.sh`。
 
-详细构建说明、只读扫描与界面渲染命令见[开发指南](docs/DEVELOPMENT.zh-CN.md)，验证记录见 [`VALIDATION.md`](VALIDATION.md)。
+详细构建说明、只读扫描与界面渲染命令见[开发指南](docs/DEVELOPMENT.zh-CN.md)，验证记录见 [`VALIDATION.md`](docs/VALIDATION.md)。
 
 ## 设计手记
 
-Crumple 的识别来自纸张、纸篓，以及一次轻巧而明确的动作。界面审查参考 [Damir Sokolovsky 的 unslop](https://github.com/heydamir/unslop)，遵循 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 署名。适配过程与来源记录见[界面设计方向](design/UI-DIRECTION.md)。
+Crumple 的识别来自纸张、纸篓，以及一次轻巧而明确的动作。界面审查参考 [Damir Sokolovsky 的 unslop](https://github.com/heydamir/unslop)，遵循 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 署名。适配过程与来源记录见[界面设计方向](docs/UI-DIRECTION.md)。
 
 <br>
 
