@@ -4,11 +4,6 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>zh-Hans</string>
-	<key>CFBundleLocalizations</key>
-	<array>
-		<string>zh-Hans</string>
-		<string>en</string>
-	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Crumple</string>
 	<key>CFBundleExecutable</key>
@@ -19,18 +14,21 @@
 	<string>com.ziyuanjing.Crumple</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>zh-Hans</string>
+		<string>en</string>
+	</array>
 	<key>CFBundleName</key>
 	<string>Crumple</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
-	<key>NSHumanReadableCopyright</key>
-	<string>© 2026 Ziyuan Jing</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.1</string>
+	<key>CFBundleVersion</key>
+	<string>2</string>
 	<key>CrumpleUpdateRepository</key>
 	<string></string>
-	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
@@ -45,6 +43,8 @@
 	<string>Crumple 会扫描下载文件夹，找出安装包、旧下载、大文件和重复文件。</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Ziyuan Jing</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>
