@@ -48,8 +48,24 @@ private struct HealthLine: View {
                     .contentTransition(.numericText())
                 Text([health.label, health.note].joined(separator: " · "))
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(health.score >= 70 ? Theme.primary : Theme.danger)
+                    .foregroundStyle(health.score >= 75 ? Theme.primary : health.score >= 55 ? Theme.warning : Theme.danger)
             }
+            // Where the points went: each part out of 100, the weakest one marked.
+            let factors = monitor.healthFactors
+            let weakest = factors.min { $0.score < $1.score }
+            HStack(spacing: 14) {
+                ForEach(factors) { factor in
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Text(factor.title).font(.system(size: 12)).foregroundStyle(Theme.secondary)
+                        Text("\(factor.score)")
+                            .font(Theme.figures(12, weight: factor.id == weakest?.id && factor.score < 85 ? .semibold : .regular))
+                            .foregroundStyle(factor.score < 55 ? Theme.danger : factor.score < 75 ? Theme.warning : Theme.primary)
+                            .contentTransition(.numericText())
+                    }
+                }
+            }
+            .padding(.top, 2)
+            .help(String(localized: "内存占 30%、磁盘 25%、CPU 20%、温度 15%、电池 10%；最弱的一项会把总分压在它的分数加 35 以内。"))
             Text([info.chip, info.memory.byteString, info.osVersion,
                   String(localized: "已运行 \(monitor.uptime.durationText)")].filter { !$0.isEmpty }.joined(separator: " · "))
                 .font(.system(size: 12))

@@ -236,6 +236,61 @@ struct ScannerTests {
     }
 }
 
+@Suite("健康分")
+struct HealthScoreTests {
+    func healthy() -> [HealthScore.Factor] {
+        [HealthScore.memory(pressure: 1, swap: 0),
+         HealthScore.cpu(history: Array(repeating: 0.1, count: 20), load: 2, cores: 10),
+         HealthScore.disk(available: 300_000_000_000, total: 500_000_000_000),
+         HealthScore.thermal(.nominal),
+         HealthScore.battery(health: 100)]
+    }
+
+    @Test("一切正常时是满分")
+    func healthyIsFull() {
+        #expect(HealthScore.combine(healthy()) == 100)
+        #expect(HealthScore.label(100) == "很好")
+    }
+
+    @Test("内存用满本身不扣分，压力和交换才扣")
+    func memoryJudgedByPressure() {
+        #expect(HealthScore.memory(pressure: 1, swap: 0).score == 100)
+        #expect(HealthScore.memory(pressure: 2, swap: 0).score < 70)
+        #expect(HealthScore.memory(pressure: 1, swap: 4_000_000_000).score < 100)
+        #expect(HealthScore.memory(pressure: 4, swap: 0).score < HealthScore.memory(pressure: 2, swap: 0).score)
+    }
+
+    @Test("CPU 偶尔冲高一下不扣分，一直忙才扣")
+    func cpuLooksAtTheLastHalfMinute() {
+        let spike = Array(repeating: 0.1, count: 19) + [1.0]
+        #expect(HealthScore.cpu(history: spike, load: 2, cores: 10).score == 100)
+        #expect(HealthScore.cpu(history: Array(repeating: 0.95, count: 20), load: 12, cores: 10).score < 60)
+    }
+
+    @Test("磁盘越满分越低，而且是连续变化的")
+    func diskIsSmooth() {
+        let total: Int64 = 500_000_000_000
+        let scores = stride(from: 0.0, through: 0.3, by: 0.01).map {
+            HealthScore.disk(available: Int64(Double(total) * $0), total: total).score
+        }
+        #expect(scores == scores.sorted())
+        #expect(zip(scores, scores.dropFirst()).allSatisfy { $1 - $0 <= 12 })
+    }
+
+    @Test("一项严重问题不会被其他几项平均掉")
+    func weakestPartCapsTheTotal() {
+        var factors = healthy()
+        factors[2] = HealthScore.disk(available: 8_000_000_000, total: 500_000_000_000) // 1.6% free
+        #expect(HealthScore.combine(factors) <= 50)
+        #expect(HealthScore.label(Int(HealthScore.combine(factors))) == "需要关注")
+    }
+
+    @Test("没有电池时按其余几项算")
+    func noBattery() {
+        #expect(HealthScore.combine(Array(healthy().dropLast())) == 100)
+    }
+}
+
 @Suite("纸篓和声音")
 struct BasketTests {
     @Test("纸篓里的纸团跟着废纸篓变多，空了就没有")
