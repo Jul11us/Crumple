@@ -236,6 +236,23 @@ struct ScannerTests {
     }
 }
 
+@Suite("停止扫描")
+struct CancelScanTests {
+    @Test("停止后扫描马上收手，不交出半截结果")
+    func cancelledScansReturnNothing() async {
+        let files = Task.detached {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return Scanner.scanLargeFiles(minBytes: 1) { _ in }
+        }
+        #expect(await files.value.isEmpty)
+        let copies = Task.detached {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return DuplicateFinder.scan(minBytes: 1, ignored: []) { _ in }
+        }
+        #expect(await copies.value.isEmpty)
+    }
+}
+
 @Suite("健康分")
 struct HealthScoreTests {
     func healthy() -> [HealthScore.Factor] {

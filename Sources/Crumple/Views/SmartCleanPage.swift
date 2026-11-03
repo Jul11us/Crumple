@@ -81,6 +81,7 @@ private struct SmartScanning: View {
             Spacer(minLength: 24)
             Button("停止扫描") { model.cancelSmartScan() }
                 .buttonStyle(SecondaryButtonStyle())
+                .keyboardShortcut(.cancelAction)
             Spacer().frame(height: 40)
         }
         .frame(maxWidth: .infinity)

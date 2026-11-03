@@ -1,4 +1,5 @@
 import SwiftUI
+import QuickLook
 
 struct ContentView: View {
     @Environment(AppModel.self) private var model
@@ -77,6 +78,7 @@ struct ContentView: View {
         }
         .onAppear {
             model.openMainWindow = { openWindow(id: "main") }
+            model.installKeyMonitor()
             model.startSplashIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -85,6 +87,7 @@ struct ContentView: View {
         .sheet(isPresented: Binding(get: { model.showsOnboarding }, set: { model.showsOnboarding = $0 })) {
             OnboardingView()
         }
+        .quickLookPreview(Binding(get: { model.previewURL }, set: { model.previewURL = $0 }))
         .frame(minWidth: 1100, minHeight: 720)
         .preferredColorScheme(model.appearance.colorScheme)
         .alert(

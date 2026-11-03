@@ -32,6 +32,10 @@ final class CleanCategory: Identifiable {
         }
     }
 
+    func selectAll() {
+        for i in items.indices where items[i].status != .cleaned { items[i].isSelected = true }
+    }
+
     func toggle(_ id: String) {
         guard let i = items.firstIndex(where: { $0.id == id }) else { return }
         items[i].isSelected.toggle()
@@ -99,6 +103,15 @@ final class AppModel {
     var fileSort: FileSort = .size
     var appFilter: AppFilter = .all
     var focusedAppID: String?
+    /// The row under the pointer (or last clicked), which the space bar previews.
+    @ObservationIgnored var pointedURL: URL?
+    /// The file shown in Quick Look, if any.
+    var previewURL: URL?
+    /// The last file thrown by hand, so ⌘Z can put it back in its row.
+    @ObservationIgnored private var lastThrow: (entry: UUID, item: String, kind: CategoryKind)?
+    /// One batch sent to the shredder with ⌥⌘⌫, whatever the usual cleaning mode is.
+    @ObservationIgnored private var batchMode: CleanMode?
+    @ObservationIgnored private var keyMonitor: Any?
 
     // MARK: Cleaning
     private(set) var cleaningCategoryID: CategoryKind?
@@ -241,6 +254,8 @@ final class AppModel {
     @ObservationIgnored var iconFrames: [String: CGRect] = [:]
     @ObservationIgnored var listViewport: CGRect = .zero
     @ObservationIgnored private var scanToken = 0
+    /// The page scans that are running, so they can be called off; and where each one goes back to.
+    @ObservationIgnored private var listScans: [Page: (task: Task<Void, Never>, previous: ListPhase)] = [:]
     @ObservationIgnored private var flagsMonitor: Any?
     @ObservationIgnored private var shredAllowed = true
     @ObservationIgnored private var noteToken = 0
@@ -489,7 +504,7 @@ final class AppModel {
     }
 
     func cleaningMode(for kind: CategoryKind) -> CleanMode {
-        kind == .applications ? .trash : mode
+        kind == .applications ? .trash : batchMode ?? mode
     }
 
     // MARK: - Smart clean
@@ -568,10 +583,10 @@ final class AppModel {
         withAnimation(.smooth(duration: 0.45)) { smartPhase = .landing }
     }
 
-    func requestSmartClean() {
+    func requestSmartClean(shred: Bool = false) {
         let work = junk.filter { !$0.selectedItems.isEmpty }
         guard !isCleaning, !work.isEmpty else { return }
-        confirmIfDeleting(bytes: junkSelectedBytes) { [weak self] in
+        confirmIfDeleting(bytes: junkSelectedBytes, shred: shred) { [weak self] in
             self?.startCleaning(work, source: .smartClean)
         }
     }
@@ -582,28 +597,64 @@ final class AppModel {
         guard !isCleaning, filesPhase != .scanning else { return }
         banner = nil
         filesChecked = 0
-        fileFilter = nil
+        let previous = filesPhase
         withAnimation(.smooth(duration: 0.45)) { filesPhase = .scanning }
         largeFiles.isScanning = true
         let minBytes = Paths.isDemo ? 1_000_000 : Int64(largeFileThresholdMB) * 1_000_000
-        Task {
+        let task = Task {
             let started = Date()
-            let items = await Task.detached(priority: .userInitiated) {
+            let work = Task.detached(priority: .userInitiated) {
                 Scanner.scanLargeFiles(minBytes: minBytes) { checked in
                     Task { @MainActor in self.filesChecked = checked }
                 }
-            }.value
+            }
+            let items = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
             let remaining = 1.4 - Date().timeIntervalSince(started)
             if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
+            guard !Task.isCancelled else { return }
+            listScans[.largeFiles] = nil
+            fileFilter = nil
             largeFiles.items = items.filter { !isIgnored($0.url) }
             largeFiles.isScanning = false
             withAnimation(.smooth(duration: 0.5)) { filesPhase = .results }
         }
+        listScans[.largeFiles] = (task, previous)
     }
 
-    func requestLargeFileClean() {
+    /// Calls off a scan that is still running and goes back to what was on the page before it.
+    func cancelScan(on page: Page) {
+        guard let scan = listScans.removeValue(forKey: page) else { return }
+        scan.task.cancel()
+        let back: ListPhase = scan.previous == .results ? .results : .landing
+        withAnimation(.smooth(duration: 0.4)) {
+            switch page {
+            case .largeFiles: largeFiles.isScanning = false; filesPhase = back
+            case .duplicates: duplicates.isScanning = false; dupPhase = back
+            case .uninstaller: apps.isScanning = false; appsPhase = back
+            default: break
+            }
+        }
+    }
+
+    /// Whether the page is showing a scan that can be called off.
+    func isScanning(_ page: Page) -> Bool {
+        switch page {
+        case .smartClean: smartPhase == .scanning
+        case .largeFiles: filesPhase == .scanning
+        case .duplicates: dupPhase == .scanning
+        case .uninstaller: appsPhase == .scanning
+        default: false
+        }
+    }
+
+    func cancelCurrentScan() {
+        guard isScanning(page) else { return NSSound.beep() }
+        if page == .smartClean { cancelSmartScan() } else { cancelScan(on: page) }
+    }
+
+    func requestLargeFileClean(shred: Bool = false) {
         guard !isCleaning, !largeFiles.selectedItems.isEmpty else { return }
-        confirmIfDeleting(bytes: largeFiles.selectedBytes) { [weak self] in
+        confirmIfDeleting(bytes: largeFiles.selectedBytes, shred: shred) { [weak self] in
             guard let self else { return }
             self.startCleaning([self.largeFiles], source: .largeFiles)
         }
@@ -615,31 +666,36 @@ final class AppModel {
         guard !isCleaning, dupPhase != .scanning else { return }
         banner = nil
         dupProgress = String(localized: "正在列出文件…")
+        let previous = dupPhase
         withAnimation(.smooth(duration: 0.45)) { dupPhase = .scanning }
         duplicates.isScanning = true
         let minBytes: Int64 = Paths.isDemo ? 50_000 : 256_000
         let ignored = ignoredPaths
-        Task {
+        let task = Task {
             let started = Date()
-            let items = await Task.detached(priority: .userInitiated) {
+            let work = Task.detached(priority: .userInitiated) {
                 DuplicateFinder.scan(minBytes: minBytes, ignored: ignored) { text in
                     Task { @MainActor in self.dupProgress = text }
                 }
-            }.value
+            }
+            let items = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
             let remaining = 1.4 - Date().timeIntervalSince(started)
             if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
+            guard !Task.isCancelled else { return }
+            listScans[.duplicates] = nil
             duplicates.items = items
             duplicates.isScanning = false
             withAnimation(.smooth(duration: 0.5)) { dupPhase = .results }
         }
+        listScans[.duplicates] = (task, previous)
     }
 
     /// How many sets of identical files are listed.
     var duplicateGroups: Int { Set(duplicates.liveItems.compactMap { $0.keeper?.path }).count }
 
-    func requestDuplicateClean() {
+    func requestDuplicateClean(shred: Bool = false) {
         guard !isCleaning, !duplicates.selectedItems.isEmpty else { return }
-        confirmIfDeleting(bytes: duplicates.selectedBytes) { [weak self] in
+        confirmIfDeleting(bytes: duplicates.selectedBytes, shred: shred) { [weak self] in
             guard let self else { return }
             self.startCleaning([self.duplicates], source: .duplicates)
         }
@@ -668,9 +724,10 @@ final class AppModel {
         guard !isCleaning, appsPhase != .scanning else { return }
         banner = nil
         appsProgress = (0, 0)
+        let previous = appsPhase
         withAnimation(.smooth(duration: 0.45)) { appsPhase = .scanning }
         apps.isScanning = true
-        Task {
+        let task = Task {
             let started = Date()
             let items = await Task.detached(priority: .userInitiated) {
                 Scanner.scanApplications { done, total in
@@ -679,11 +736,14 @@ final class AppModel {
             }.value
             let remaining = 1.4 - Date().timeIntervalSince(started)
             if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
+            guard !Task.isCancelled else { return }
+            listScans[.uninstaller] = nil
             apps.items = items.filter { !isIgnored($0.url) }
             apps.isScanning = false
             focusedAppID = apps.items.first?.id
             withAnimation(.smooth(duration: 0.5)) { appsPhase = .results }
         }
+        listScans[.uninstaller] = (task, previous)
     }
 
     func requestUninstall(only id: String? = nil) {
@@ -707,16 +767,21 @@ final class AppModel {
 
     // MARK: - Cleaning
 
-    private func confirmIfDeleting(bytes: Int64, then action: @escaping @MainActor () -> Void) {
-        if mode == .delete && !Paths.isDemo {
+    /// `shred` sends this one batch to the shredder even when cleaning normally goes to the Trash.
+    private func confirmIfDeleting(bytes: Int64, shred: Bool = false, then action: @escaping @MainActor () -> Void) {
+        let run: @MainActor () -> Void = { [weak self] in
+            self?.batchMode = shred ? .delete : nil
+            action()
+        }
+        if (mode == .delete || shred) && !Paths.isDemo {
             confirmation = Confirmation(
                 title: String(localized: "把选中的文件送进碎纸机？"),
                 message: String(localized: "将永久删除 \(bytes.byteString)，不经过废纸篓，无法撤销。"),
                 actionTitle: String(localized: "粉碎"),
-                action: action
+                action: run
             )
         } else {
-            action()
+            run()
         }
     }
 
@@ -795,6 +860,7 @@ final class AppModel {
             cleaningCategoryID = nil
             isCleaning = false
         }
+        batchMode = nil
         report.historyID = record(report)
         refreshDisk()
         if source == .smartClean {
@@ -873,7 +939,8 @@ final class AppModel {
                 category.setStatus(item.id, ok ? .cleaned : (block == nil ? .failed : .ready))
             }
             if ok {
-                record(CleanSummary(source: .manual, mode: mode, count: 1, bytes: size, trashed: outcome.trashed))
+                rememberThrow(record(CleanSummary(source: .manual, mode: mode, count: 1, bytes: size, trashed: outcome.trashed)),
+                              item: item.id, kind: category.kind)
                 if focusedAppID == item.id { focusedAppID = apps.liveItems.first?.id }
                 AccessibilityNotification.Announcement(String(localized: "已扔掉 \(item.name)，\(size.byteString)")).post()
             }
@@ -940,7 +1007,8 @@ final class AppModel {
                     category.setStatus(id, ok ? .cleaned : (block == nil ? .failed : .ready))
                 }
                 if ok {
-                    record(CleanSummary(source: .manual, mode: mode, count: 1, bytes: size, trashed: outcome.trashed))
+                    rememberThrow(record(CleanSummary(source: .manual, mode: mode, count: 1, bytes: size, trashed: outcome.trashed)),
+                                  item: id, kind: category.kind)
                     if focusedAppID == id { focusedAppID = apps.liveItems.first?.id }
                 }
             } else {
@@ -1045,6 +1113,11 @@ final class AppModel {
             }
             HistoryStore.save(history)
             refreshDisk()
+            // A file thrown by hand goes straight back into its row.
+            if let thrown = lastThrow, thrown.entry == entryID {
+                lastThrow = nil
+                withAnimation(.snappy) { category(thrown.kind).setStatus(thrown.item, .ready) }
+            }
             // The files are back, so a list that was showing them is out of date.
             switch history[index].source {
             case .largeFiles where filesPhase == .results: scanLargeFiles()
@@ -1057,6 +1130,110 @@ final class AppModel {
             } else {
                 showToast(String(localized: "已全部放回原处（\(back) 个）"))
             }
+        }
+    }
+
+    private func rememberThrow(_ entry: UUID?, item: String, kind: CategoryKind) {
+        lastThrow = entry.map { ($0, item, kind) }
+    }
+
+    /// The latest clean, if its files are still in the Trash. ⌘Z puts them back.
+    var undoableEntry: HistoryEntry? {
+        guard !isCleaning, let latest = history.first, canRestore(latest) else { return nil }
+        return latest
+    }
+
+    func undoLastClean() {
+        guard let entry = undoableEntry else {
+            if isCleaning {
+                NSSound.beep()
+            } else if history.first.map({ !$0.isRestored && $0.mode == .delete }) == true {
+                showToast(String(localized: "粉碎的文件没有经过废纸篓，无法撤销"))
+            } else {
+                showToast(String(localized: "没有可以撤销的清理"))
+            }
+            return
+        }
+        restore(entry.id)
+    }
+
+    // MARK: - Keyboard
+
+    /// The list the current page is showing, for ⌘A and ⌘⌫.
+    private var currentList: [CleanCategory] {
+        switch page {
+        case .smartClean where smartPhase == .review: [category(reviewKind)]
+        case .smartClean where smartPhase == .results: junk
+        case .largeFiles where filesPhase == .results: [largeFiles]
+        case .duplicates where dupPhase == .results: [duplicates]
+        case .uninstaller where appsPhase == .results: [apps]
+        default: []
+        }
+    }
+
+    var canSelectAll: Bool { !isCleaning && currentList.contains { !$0.liveItems.isEmpty } }
+    var canThrowSelection: Bool { !isCleaning && currentList.contains { !$0.selectedItems.isEmpty } }
+
+    func selectAllInList() {
+        guard canSelectAll else { return NSSound.beep() }
+        withAnimation(.snappy) { currentList.forEach { $0.selectAll() } }
+    }
+
+    /// ⌘⌫ throws the ticked files the usual way; ⌥⌘⌫ sends them to the shredder.
+    func throwSelection(shred: Bool) {
+        guard canThrowSelection, !(shred && page == .uninstaller) else { return NSSound.beep() }
+        switch page {
+        case .smartClean: requestSmartClean(shred: shred)
+        case .largeFiles: requestLargeFileClean(shred: shred)
+        case .duplicates: requestDuplicateClean(shred: shred)
+        case .uninstaller: requestUninstall()
+        default: break
+        }
+    }
+
+    var canRescan: Bool {
+        guard !isCleaning else { return false }
+        switch page {
+        case .smartClean, .largeFiles, .duplicates, .uninstaller, .analysis, .overview: return !isScanning(page)
+        default: return false
+        }
+    }
+
+    func rescan() {
+        guard canRescan else { return NSSound.beep() }
+        switch page {
+        case .smartClean: startSmartScan()
+        case .largeFiles: scanLargeFiles()
+        case .duplicates: scanDuplicates()
+        case .uninstaller: scanApps()
+        case .analysis: analyzer.rescan()
+        case .overview: refreshDisk()
+        default: break
+        }
+    }
+
+    func go(to page: Page) {
+        guard self.page != page else { return }
+        pointedURL = nil
+        withAnimation(.smooth(duration: 0.3)) { self.page = page }
+    }
+
+    /// Space previews the row under the pointer with Quick Look, the way Finder does.
+    func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.keyCode == 49,
+                  event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .numericPad, .function]).isEmpty,
+                  let window = event.window, !(window is NSPanel), window.attachedSheet == nil,
+                  !(window.firstResponder is NSText), self.confirmation == nil else { return event }
+            if self.previewURL != nil {
+                self.previewURL = nil
+                return nil
+            }
+            guard let url = self.pointedURL, self.stage.held == nil,
+                  FileManager.default.fileExists(atPath: url.path) else { return event }
+            self.previewURL = url
+            return nil
         }
     }
 

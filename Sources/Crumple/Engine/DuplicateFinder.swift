@@ -29,6 +29,7 @@ enum DuplicateFinder {
             ) else { continue }
             for case let url as URL in enumerator {
                 checked += 1
+                if checked % 500 == 0, Task.isCancelled { return [] }
                 if checked % 500 == 0 { progress(String(localized: "已检查 \(checked.formatted()) 个文件")) }
                 if IgnoreList.contains(url, in: ignored) {
                     enumerator.skipDescendants()
@@ -59,6 +60,7 @@ enum DuplicateFinder {
         for group in sameSize {
             // Cheap pass: a few samples from each file.
             var bySample: [String: [Candidate]] = [:]
+            if Task.isCancelled { return [] }
             for file in group {
                 compared += 1
                 if compared % 20 == 0 { progress(String(localized: "正在比对内容 \(compared)/\(total)")) }
@@ -143,6 +145,7 @@ enum DuplicateFinder {
         defer { try? handle.close() }
         var hasher = SHA256()
         while true {
+            if Task.isCancelled { return nil }
             let chunk: Data?
             do { chunk = try autoreleasepool { try handle.read(upToCount: 1 << 20) } } catch { return nil }
             guard let chunk, !chunk.isEmpty else { break }
