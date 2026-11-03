@@ -48,6 +48,7 @@ struct SettingsView: View {
                     ForEach(AppAppearance.allCases) { Text($0.title).tag($0) }
                 }
                 Toggle("启动时播放开场动画", isOn: $model.playsLaunchAnimation)
+                Toggle("声音和触感", isOn: $model.playsSounds)
             }
 
             Section {

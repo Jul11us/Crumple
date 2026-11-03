@@ -379,6 +379,7 @@ EN = {
     "可用 · 共 %@": "free of %@",
     "交换 %@": "swap %@",
     "雾灰": "Mist",
+    "声音和触感": "Sounds and haptics",
     "送进碎纸机": "Send to Shredder",
     "送进碎纸机？": "Send to the shredder?",
     "粉碎": "Shred",

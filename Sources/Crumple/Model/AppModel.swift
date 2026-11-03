@@ -174,6 +174,10 @@ final class AppModel {
     /// The app's one model, for the AppKit delegate.
     static weak var shared: AppModel?
 
+    /// Paper sounds and trackpad taps; `SoundBoard` reads the same setting.
+    var playsSounds: Bool {
+        didSet { UserDefaults.standard.set(playsSounds, forKey: "playsSounds") }
+    }
     var playsLaunchAnimation: Bool {
         didSet { UserDefaults.standard.set(playsLaunchAnimation, forKey: "playsLaunchAnimation") }
     }
@@ -254,6 +258,7 @@ final class AppModel {
         largeFileThresholdMB = defaults.object(forKey: "largeFileThresholdMB") as? Int ?? 100
         oldDownloadDays = defaults.object(forKey: "oldDownloadDays") as? Int ?? 90
         playsLaunchAnimation = defaults.object(forKey: "playsLaunchAnimation") as? Bool ?? true
+        playsSounds = defaults.object(forKey: "playsSounds") as? Bool ?? true
         hidesPermissionBanner = defaults.bool(forKey: "hidesPermissionBanner")
         ignoredPaths = defaults.stringArray(forKey: Self.ignoredKey) ?? []
         showsMenuBarExtra = defaults.object(forKey: "showsMenuBarExtra") as? Bool ?? true
@@ -419,14 +424,23 @@ final class AppModel {
 
     // MARK: - Derived state
 
+    /// The basket sits in the corner of every page, except where the page's own picture already shows one.
     var showsBasket: Bool {
         switch page {
-        case .smartClean: smartPhase == .review || smartPhase == .cleaning
-        case .largeFiles: filesPhase == .results
-        case .duplicates: dupPhase == .results
-        case .uninstaller: appsPhase == .results
-        case .overview, .status, .analysis, .optimize, .history: false
+        case .smartClean: smartPhase != .landing
+        case .largeFiles: filesPhase != .landing
+        case .duplicates: dupPhase != .landing
+        case .uninstaller: appsPhase != .landing
+        case .history: !history.isEmpty
+        case .overview, .status, .analysis, .optimize: true
         }
+    }
+
+    /// How many balls show in the basket for what is in the Trash: a few for a little, more as it grows.
+    nonisolated static func pileCount(forTrash bytes: Int64) -> Int {
+        guard bytes > 0 else { return 0 }
+        let megabytes = Double(bytes) / 1_000_000
+        return min(30, 1 + Int((log2(megabytes + 1) * 1.6).rounded()))
     }
 
     var junkFound: Int64 { junk.reduce(0) { $0 + $1.totalBytes } }
@@ -1011,8 +1025,15 @@ final class AppModel {
         guard let entryID, let index = history.firstIndex(where: { $0.id == entryID }),
               let files = history[index].trashed else { return }
         Task {
-            let back = await Task.detached(priority: .userInitiated) { files.filter { Cleaner.restore($0) }.count }.value
+            let putBack = await Task.detached(priority: .userInitiated) { files.filter { Cleaner.restore($0) } }.value
+            let back = putBack.count
             let missing = files.count - back
+            // The balls jump back out of the basket and smooth out on their way to the page.
+            let icons = putBack.prefix(8).map { NSWorkspace.shared.icon(forFile: $0.original) as NSImage? }
+            let target = listViewport == .zero
+                ? CGPoint(x: stage.canvasSize.width * 0.55, y: stage.canvasSize.height * 0.42)
+                : CGPoint(x: listViewport.midX, y: listViewport.midY)
+            if showsBasket { stage.unthrow(icons: Array(icons), to: target) }
             guard back > 0 else {
                 showToast(String(localized: "没能放回：文件已经不在废纸篓里，或原处已有同名文件"))
                 return
@@ -1091,7 +1112,12 @@ final class AppModel {
         disk = DiskInfo.current()
         Task {
             let size = await Task.detached(priority: .utility) { Permissions.trashSize() }.value
+            let previous = trashSize
             trashSize = size
+            // Without access to the Trash the basket just keeps what was thrown this session.
+            if let size {
+                stage.syncPile(to: Self.pileCount(forTrash: size), trashShrank: size < (previous ?? .max))
+            }
         }
     }
 

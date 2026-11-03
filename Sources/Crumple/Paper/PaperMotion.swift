@@ -350,6 +350,44 @@ struct TossedPaper: Identifiable {
     }
 }
 
+// MARK: - Undo
+
+/// A paper ball that jumps back out of the basket and smooths itself flat on the way, for undo.
+struct ReturningPaper: Identifiable {
+    static let duration = 1.0
+
+    let id = UUID()
+    let born: Double
+    let start: CGPoint
+    let target: CGPoint
+    let seed: UInt64
+    let icon: NSImage?
+
+    func pose(at t: Double) -> PaperPose {
+        let pop = 0.14, land = 0.78
+        if t < pop {
+            let k = CGFloat(easeOutCubic(t / pop))
+            return PaperPose(center: CGPoint(x: start.x, y: start.y - 34 * k), rotation: 0.4 * k, scale: 0.8,
+                             crumple: 1, sheetScale: 1, opacity: 1, phase: .loose)
+        }
+        let p0 = CGPoint(x: start.x, y: start.y - 34)
+        if t < land {
+            let u = CGFloat((t - pop) / (land - pop))
+            let peakY = min(p0.y, target.y) - max(60, abs(target.x - p0.x) * 0.22)
+            let control = CGPoint(x: (p0.x + target.x) / 2, y: 2 * peakY - (p0.y + target.y) / 2)
+            let inv = 1 - u
+            let center = CGPoint(x: inv * inv * p0.x + 2 * inv * u * control.x + u * u * target.x,
+                                 y: inv * inv * p0.y + 2 * inv * u * control.y + u * u * target.y)
+            let unfold = CGFloat(easeInOutCubic(Double(u)))
+            return PaperPose(center: center, rotation: 0.4 + 2.2 * u * (1 - u), scale: 0.8 + 0.3 * unfold,
+                             crumple: 1 - unfold, sheetScale: 1, opacity: 1, phase: .loose)
+        }
+        let k = clamp01((t - land) / (ReturningPaper.duration - land))
+        return PaperPose(center: CGPoint(x: target.x, y: target.y - 6 * CGFloat(k)), rotation: 0, scale: 1.1,
+                         crumple: 0, sheetScale: 1, opacity: 1 - k, phase: .loose)
+    }
+}
+
 // MARK: - Stage state
 
 struct StageSnapshot {
@@ -363,6 +401,9 @@ struct StageSnapshot {
     var shredderHiddenAt: Double?
     var stripCount = 0
     var lastShred: Double?
+    var returning: [ReturningPaper] = []
+    /// How many balls were in the basket when it was tipped out.
+    var poured = 0
 }
 
 @MainActor @Observable
@@ -378,6 +419,8 @@ final class PaperStage {
     private(set) var shredderHiddenAt: Double?
     private(set) var stripCount = 0
     private(set) var lastShred: Double?
+    private(set) var returning: [ReturningPaper] = []
+    private(set) var poured = 0
 
     @ObservationIgnored var canvasSize = CGSize(width: 1080, height: 720)
     @ObservationIgnored private var seed: UInt64 = 0x5EED
@@ -387,7 +430,7 @@ final class PaperStage {
         StageSnapshot(papers: papers, tossed: tossed, held: held, pileCount: pileCount,
                       lastLanding: lastLanding, pileClearedAt: pileClearedAt,
                       shredderShownAt: shredderShownAt, shredderHiddenAt: shredderHiddenAt,
-                      stripCount: stripCount, lastShred: lastShred)
+                      stripCount: stripCount, lastShred: lastShred, returning: returning, poured: poured)
     }
 
     private var basket: BasketGeometry { BasketGeometry(rect: BasketGeometry.rect(in: canvasSize)) }
@@ -414,6 +457,7 @@ final class PaperStage {
         tossed[i].lifetime = now - tossed[i].born + (shredded ? Paper.shredDuration + 0.1 : 1.0)
         keepTicking(for: 2.5)
         if shredded { noteShred(after: 0.2) }
+        SoundBoard.shared.play(shredded ? .shred : .clank, volume: shredded ? 1 : 0.5)
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(shredded ? Paper.shredDuration + 0.1 : 1.0))
             self?.tossed.removeAll { $0.id == id }
@@ -462,6 +506,7 @@ final class PaperStage {
         held = HeldPaper(itemID: itemID, grabbedAt: Date.timeIntervalSinceReferenceDate, origin: origin,
                          location: location, seed: nextSeed(), icon: icon, blocked: blocked)
         isTicking = true
+        SoundBoard.shared.play(.crumple, volume: 0.7)
     }
 
     func moveHeld(to location: CGPoint) {
@@ -497,6 +542,7 @@ final class PaperStage {
                     let deleted = self.tossed.first { $0.id == toss.id }?.succeeded != false
                     if toss.kind == .make && deleted { self.pileCount += 1 }
                     self.lastLanding = Date.timeIntervalSinceReferenceDate
+                    SoundBoard.shared.play(toss.kind == .make && deleted ? .swish : .clank)
                 }
             }
             try? await Task.sleep(for: .seconds(toss.lifetime - toss.impactTime))
@@ -522,8 +568,11 @@ final class PaperStage {
         keepTicking(for: paper.lifetime + 1.7)
 
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(paper.landTime))
+            try? await Task.sleep(for: .seconds(Paper.crumpleStart))
+            if !shred { SoundBoard.shared.play(.crumple, volume: 0.4) }
+            try? await Task.sleep(for: .seconds(paper.landTime - Paper.crumpleStart))
             guard let self else { return }
+            SoundBoard.shared.play(!succeeded ? .clank : shred ? .shred : .swish, volume: 0.7)
             if succeeded && !shred { self.pileCount += 1 }
             if succeeded && shred { self.noteShred(after: 0.15) }
             if !shred { self.lastLanding = Date.timeIntervalSinceReferenceDate }
@@ -534,15 +583,50 @@ final class PaperStage {
         }
     }
 
+    /// The Trash was emptied: tip the basket over and pour everything out.
     func clearPile() {
         let now = Date.timeIntervalSinceReferenceDate
+        poured = max(pileCount, 3)
         pileClearedAt = now
-        lastLanding = now
-        keepTicking(for: 1.8)
+        Task {
+            try? await Task.sleep(for: .seconds(0.22))
+            SoundBoard.shared.play(.pour)
+        }
+        keepTicking(for: StageRenderer.pourDuration + 0.2)
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(0.55))
+            try? await Task.sleep(for: .seconds(StageRenderer.pourDuration))
             self?.pileCount = 0
             self?.pileClearedAt = nil
+        }
+    }
+
+    /// Keeps the pile in step with what is really in the Trash. It only shrinks when the Trash did
+    /// (emptied or put back elsewhere); balls thrown just now stay until the next reading catches up.
+    func syncPile(to count: Int, trashShrank: Bool) {
+        guard pileClearedAt == nil else { return }
+        if trashShrank || count > pileCount { pileCount = count }
+    }
+
+    /// Undo: balls jump back out of the basket and unfold on their way to `target`.
+    func unthrow(icons: [NSImage?], to target: CGPoint) {
+        let now = Date.timeIntervalSinceReferenceDate
+        let mouth = basket.mouth
+        for (i, icon) in icons.enumerated() {
+            var rng = SeededRandom(nextSeed())
+            let paper = ReturningPaper(born: now + Double(i) * 0.09,
+                                       start: CGPoint(x: mouth.midX + rng.range(-16, 16), y: mouth.midY + 6),
+                                       target: CGPoint(x: target.x + rng.range(-60, 60), y: target.y + rng.range(-30, 30)),
+                                       seed: rng.next(), icon: icon)
+            returning.append(paper)
+        }
+        pileCount = max(0, pileCount - icons.count)
+        lastLanding = now
+        SoundBoard.shared.play(.unfold)
+        let total = ReturningPaper.duration + Double(icons.count) * 0.09
+        keepTicking(for: total + 0.2)
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(total + 0.1))
+            self?.returning.removeAll { $0.born <= now + Double(icons.count) * 0.09 }
         }
     }
 

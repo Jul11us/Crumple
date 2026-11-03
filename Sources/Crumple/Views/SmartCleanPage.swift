@@ -167,6 +167,7 @@ private struct SmartResults: View {
                 .opacity(model.junkSelectedCount == 0 ? 0.5 : 1)
                 .keyboardShortcut(.return, modifiers: .command)
             }
+            .padding(.trailing, BasketGeometry.reservedTrailing - 40)
         }
         .padding(.horizontal, 40)
         .padding(.top, 48)

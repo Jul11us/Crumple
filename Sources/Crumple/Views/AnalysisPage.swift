@@ -99,9 +99,11 @@ struct AnalysisPage: View {
                 .surfaceCard(radius: 16, padding: 4)
             }
         }
-        .padding(.horizontal, 32)
+        .padding(.leading, 32)
+        // The right-hand column stays clear for the basket, which sits in the corner of every page.
+        .padding(.trailing, BasketGeometry.reservedTrailing)
         .padding(.top, 48)
-        .padding(.bottom, 28)
+        .padding(.bottom, 32)
         .onAppear {
             if analyzer.trail.isEmpty { analyzer.open(base: .home) }
         }

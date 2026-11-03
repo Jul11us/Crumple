@@ -202,6 +202,8 @@ struct BasketGeometry {
     static let bottomInset: CGFloat = 20
     /// Space the bottom bar leaves free for the basket.
     static var reservedTrailing: CGFloat { trailingInset + size.width + 18 }
+    /// Space a page leaves at its bottom so its last rows can scroll clear of the basket.
+    static var clearance: CGFloat { bottomInset + size.height + 16 }
 
     static func rect(in canvas: CGSize) -> CGRect {
         CGRect(x: canvas.width - trailingInset - size.width, y: canvas.height - bottomInset - size.height,
@@ -454,8 +456,18 @@ enum ShredderArt {
 }
 
 enum StageRenderer {
+    static let pourDuration = 1.5
+
+    /// How far the basket leans over while it is emptied: over, a pause while it pours, back up.
+    static func tipAngle(_ t: Double) -> Double {
+        if t < 0.32 { return -1.2 * easeInOutCubic(t / 0.32) }
+        if t < 0.9 { return -1.2 }
+        return -1.2 * (1 - easeInOutCubic(clamp01((t - 0.9) / 0.45)))
+    }
+
     static func draw(_ context: GraphicsContext, size: CGSize, now: Double, snapshot: StageSnapshot) {
         let basket = BasketGeometry(rect: BasketGeometry.rect(in: size))
+        let pourT = snapshot.pileClearedAt.map { now - $0 }
 
         // The basket wobbles and squashes a little each time something lands.
         var bg = context
@@ -508,11 +520,16 @@ enum StageRenderer {
             }
         }
 
-        BasketArt.drawBack(bg, basket, .app)
-        var pileOpacity = 1.0
-        if let cleared = snapshot.pileClearedAt {
-            pileOpacity = 1 - clamp01((now - cleared) / 0.5)
+        // Emptying the Trash: the basket tips over to the left about its bottom-left corner.
+        if let t = pourT {
+            let pivot = CGPoint(x: basket.base.minX, y: basket.rect.maxY)
+            bg.translateBy(x: pivot.x, y: pivot.y)
+            bg.rotate(by: .radians(tipAngle(t)))
+            bg.translateBy(x: -pivot.x, y: -pivot.y)
         }
+
+        BasketArt.drawBack(bg, basket, .app)
+        let pileOpacity = pourT.map { $0 < 0.3 ? 1.0 : 0 } ?? 1
         BasketArt.drawPile(bg, basket, count: snapshot.pileCount, opacity: pileOpacity)
 
         // Papers going into the basket are clipped by it; the rest are drawn after the front wall.
@@ -543,6 +560,33 @@ enum StageRenderer {
         }
 
         BasketArt.drawFront(bg, basket, .app)
+
+        // The balls tumbling out of the tipped basket and off the bottom of the window.
+        if let t = pourT, t > 0.24 {
+            let pivot = CGPoint(x: basket.base.minX, y: basket.rect.maxY)
+            let a = CGFloat(tipAngle(0.32))
+            let mouth = CGPoint(x: basket.mouth.midX, y: basket.mouth.midY)
+            let dx = mouth.x - pivot.x, dy = mouth.y - pivot.y
+            let lip = CGPoint(x: pivot.x + dx * cos(a) - dy * sin(a), y: pivot.y + dx * sin(a) + dy * cos(a))
+            for i in 0..<min(snapshot.poured, 14) {
+                var rng = SeededRandom(UInt64(i) &* 2654435761 &+ 5)
+                let s = CGFloat(t - 0.24 - Double(i) * 0.035)
+                guard s > 0 else { continue }
+                let v = CGVector(dx: -rng.range(120, 300), dy: -rng.range(40, 200))
+                let center = CGPoint(x: lip.x + rng.range(-10, 10) + v.dx * s,
+                                     y: lip.y + rng.range(-6, 6) + v.dy * s + 0.5 * TossedPaper.gravity * s * s)
+                guard center.y < size.height + 30 else { continue }
+                let pose = PaperPose(center: center, rotation: rng.range(0, 6) + s * 8, scale: 0.72, crumple: 1,
+                                     sheetScale: 1, opacity: 1, phase: .loose)
+                PaperArt.draw(context, pose: pose, seed: rng.next(), icon: nil)
+            }
+        }
+        for paper in snapshot.returning {
+            let t = now - paper.born
+            guard t >= 0, t <= ReturningPaper.duration else { continue }
+            PaperArt.draw(context, pose: paper.pose(at: t), seed: paper.seed, icon: paper.icon)
+        }
+
         for paper in inFront {
             PaperArt.draw(context, pose: paper.pose, seed: paper.seed, icon: paper.icon, tint: paper.tint)
         }

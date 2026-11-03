@@ -27,7 +27,9 @@ struct OverviewPage: View {
 
                 if !model.history.isEmpty { RecentCard() }
             }
-            .padding(.horizontal, 32)
+            .padding(.leading, 32)
+            // The right-hand column stays clear for the basket, which sits in the corner of every page.
+            .padding(.trailing, BasketGeometry.reservedTrailing)
             .padding(.top, 48)
             .padding(.bottom, 32)
             .frame(maxWidth: 1440)

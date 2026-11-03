@@ -236,6 +236,31 @@ struct ScannerTests {
     }
 }
 
+@Suite("纸篓和声音")
+struct BasketTests {
+    @Test("纸篓里的纸团跟着废纸篓变多，空了就没有")
+    func pileFollowsTrash() {
+        #expect(AppModel.pileCount(forTrash: 0) == 0)
+        let sizes: [Int64] = [1_000, 1_000_000, 100_000_000, 5_000_000_000, 500_000_000_000]
+        let counts = sizes.map(AppModel.pileCount(forTrash:))
+        #expect(counts.allSatisfy { $0 >= 1 && $0 <= 30 })
+        #expect(counts == counts.sorted())
+        #expect(counts.last == 30)
+    }
+
+    @Test("每种声音都有声、不爆音、长度合适")
+    func soundsAreSane() {
+        for sound in SoundBoard.Sound.allCases {
+            let samples = SoundBoard.synthesize(sound)
+            let seconds = Double(samples.count) / 44_100
+            #expect(seconds > 0.2 && seconds < 1.2, "\(sound)")
+            #expect(samples.allSatisfy { $0.isFinite && abs($0) <= 0.81 }, "\(sound)")
+            let loudness = samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count)
+            #expect(loudness > 0.002, "\(sound)")
+        }
+    }
+}
+
 @Suite("亲手投纸团")
 struct TossTests {
     let size = CGSize(width: 900, height: 560)

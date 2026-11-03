@@ -30,6 +30,8 @@ enum DevTools {
                 }
                 .clipped()
             }
+            .coordinateSpace(.named(StageSpace.name))
+            .overlay { if model.showsBasket { PaperStageView(stage: model.stage) } }
             .environment(model)
             .environment(\.colorScheme, scheme)
             .tint(Theme.accent)
@@ -268,6 +270,34 @@ enum DevTools {
             .environment(\.colorScheme, scheme)
             writePNG(row, scale: 1, to: dir.appendingPathComponent("shredder-\(name).png"))
         }
+    }
+
+    /// Emptying the Trash (the basket tips over and pours out) and undo (balls jump out and unfold).
+    @MainActor
+    static func renderBasketMoments(to dir: URL) {
+        _ = NSApplication.shared
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let size = CGSize(width: 420, height: 360)
+        let basket = BasketGeometry(rect: BasketGeometry.rect(in: size))
+        let icon = NSWorkspace.shared.icon(forFile: "/Applications/Safari.app")
+        let back = ReturningPaper(born: 0, start: CGPoint(x: basket.mouth.midX, y: basket.mouth.midY + 6),
+                                  target: CGPoint(x: 120, y: 120), seed: 9, icon: icon)
+        let frames: [(Double, StageSnapshot)] = [
+            (0.2, StageSnapshot(pileCount: 12, pileClearedAt: 0, poured: 12)),
+            (0.5, StageSnapshot(pileCount: 12, pileClearedAt: 0, poured: 12)),
+            (0.8, StageSnapshot(pileCount: 12, pileClearedAt: 0, poured: 12)),
+            (0.1, StageSnapshot(pileCount: 6, returning: [back])),
+            (0.45, StageSnapshot(pileCount: 6, returning: [back])),
+            (0.8, StageSnapshot(pileCount: 6, returning: [back])),
+        ]
+        let row = HStack(spacing: 8) {
+            ForEach(frames.indices, id: \.self) { i in
+                Canvas { context, size in StageRenderer.draw(context, size: size, now: frames[i].0, snapshot: frames[i].1) }
+                    .frame(width: size.width, height: size.height)
+                    .background(Theme.base)
+            }
+        }
+        writePNG(row, scale: 1, to: dir.appendingPathComponent("basket-moments.png"))
     }
 
     /// Stills of the paper animation: a strobe of whole throws, and the crumple stages up close.

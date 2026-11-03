@@ -29,6 +29,10 @@ if let dir = argument(after: "--render-dmg-background") {
     MainActor.assumeIsolated { DevTools.renderDMGBackground(to: dir) }
     exit(0)
 }
+if let dir = argument(after: "--render-basket") {
+    MainActor.assumeIsolated { DevTools.renderBasketMoments(to: dir) }
+    exit(0)
+}
 if let dir = argument(after: "--render-shredder") {
     MainActor.assumeIsolated { DevTools.renderShredder(to: dir) }
     exit(0)
