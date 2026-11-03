@@ -34,7 +34,8 @@ struct SeededRandom {
 
 struct PaperPose {
     /// `loose` papers are drawn in front of the basket (held in hand, or a missed throw).
-    enum Phase { case crumpling, flying, sinking, bouncing, loose }
+    /// `shredding` sheets are being pulled into the shredder's slot.
+    enum Phase { case crumpling, flying, sinking, bouncing, loose, shredding }
 
     var center: CGPoint
     var rotation: CGFloat
@@ -68,12 +69,18 @@ struct Paper: Identifiable {
     let tilt: CGFloat
     let bounceDirection: CGFloat
 
-    var landTime: Double { Paper.crumpleEnd + flight }
-    var lifetime: Double { landTime + (succeeded ? Paper.sinkDuration : Paper.bounceDuration) }
+    /// Headed for the shredder: the sheet stays flat and goes into the slot.
+    let shred: Bool
 
-    init(born: Double, origin: CGPoint, basket: BasketGeometry, succeeded: Bool, seed: UInt64, icon: NSImage?) {
+    var landTime: Double { Paper.crumpleEnd + flight }
+    var lifetime: Double { landTime + (succeeded ? (shred ? Paper.shredDuration : Paper.sinkDuration) : Paper.bounceDuration) }
+    static let shredDuration = 0.5
+
+    init(born: Double, origin: CGPoint, basket: BasketGeometry, succeeded: Bool, seed: UInt64, icon: NSImage?,
+         shredder: ShredderGeometry? = nil) {
         var rng = SeededRandom(seed)
-        let mouth = basket.mouth
+        let mouth = shredder?.slot ?? basket.mouth
+        shred = shredder != nil
         let fromLeft = origin.x < mouth.midX
         if succeeded {
             target = CGPoint(x: mouth.midX + mouth.width * rng.range(-0.18, 0.18), y: mouth.midY + 1)
@@ -96,9 +103,9 @@ struct Paper: Identifiable {
 
     func pose(at elapsed: Double) -> PaperPose {
         let lift = CGFloat(easeOutCubic(clamp01(elapsed / Paper.liftDuration)))
-        let crumple = CGFloat(easeInOutCubic(clamp01((elapsed - Paper.crumpleStart) / (Paper.crumpleEnd - Paper.crumpleStart))))
+        let crumple = shred ? 0 : CGFloat(easeInOutCubic(clamp01((elapsed - Paper.crumpleStart) / (Paper.crumpleEnd - Paper.crumpleStart))))
 
-        // 1. Pop out of the row and get crumpled, with a little wind-up before the throw.
+        // 1. Pop out of the row and get crumpled (or, for the shredder, stay a flat sheet), with a little wind-up.
         if elapsed < Paper.crumpleEnd {
             let windT = CGFloat(clamp01((elapsed - 0.38) / (Paper.crumpleEnd - 0.38)))
             let wind = sin(windT * .pi) * 8
@@ -126,12 +133,17 @@ struct Paper: Identifiable {
             let inv = 1 - u
             let x = inv * inv * p0.x + 2 * inv * u * control.x + u * u * p2.x
             let y = inv * inv * p0.y + 2 * inv * u * control.y + u * u * p2.y
-            return PaperPose(center: CGPoint(x: x, y: y), rotation: tilt + spin * u, scale: 1 - 0.22 * u,
-                             crumple: 1, sheetScale: 1, opacity: 1, phase: .flying)
+            return PaperPose(center: CGPoint(x: x, y: y), rotation: shred ? tilt * (1 - u) : tilt + spin * u,
+                             scale: 1 - 0.22 * u, crumple: shred ? 0 : 1, sheetScale: 1, opacity: 1, phase: .flying)
         }
 
-        // 3a. Sink into the basket…
+        // 3a. Sink into the basket, or get pulled down into the shredder…
         let d = t - flight
+        if succeeded && shred {
+            let k = CGFloat(easeInOutCubic(clamp01(d / Paper.shredDuration)))
+            return PaperPose(center: CGPoint(x: target.x, y: target.y + 44 * k), rotation: 0, scale: 0.78,
+                             crumple: 0, sheetScale: 1, opacity: 1, phase: .shredding)
+        }
         if succeeded {
             let k = CGFloat(clamp01(d / Paper.sinkDuration))
             return PaperPose(center: CGPoint(x: target.x, y: target.y + 30 * k * k), rotation: tilt + spin + 0.6 * k,
@@ -158,9 +170,13 @@ struct HeldPaper {
     let icon: NSImage?
     /// This file can't be deleted right now; the rim glows red as a warning.
     var blocked = false
+    /// When ⌥ went down: the shredder is out, so the sheet in hand smooths back out flat.
+    var armedAt: Double?
 
     func crumple(at now: Double) -> CGFloat {
-        CGFloat(easeInOutCubic(clamp01((now - grabbedAt - 0.04) / 0.32)))
+        let c = CGFloat(easeInOutCubic(clamp01((now - grabbedAt - 0.04) / 0.32)))
+        guard let armedAt else { return c }
+        return c * (1 - CGFloat(easeOutCubic(clamp01((now - armedAt) / 0.18))))
     }
 
     func pose(at now: Double) -> PaperPose {
@@ -179,7 +195,7 @@ struct HeldPaper {
 /// A paper ball the user let go of. Its whole path is worked out at release:
 /// straight in, off the rim, or a miss that falls out of the window.
 struct TossedPaper: Identifiable {
-    enum Kind: Equatable { case make, rim, miss }
+    enum Kind: Equatable { case make, rim, miss, shred }
 
     static let gravity: CGFloat = 2200
 
@@ -196,12 +212,14 @@ struct TossedPaper: Identifiable {
     let impactPoint: CGPoint
     let direction: CGFloat
     let rebound: CGVector
-    let lifetime: Double
+    var lifetime: Double
     /// Whether deleting worked; nil until the file operation finishes.
     var succeeded: Bool?
+    /// For the shredder: when the user confirmed or cancelled (the sheet waits in the slot until then).
+    var resolvedAt: Double?
 
     init(itemID: String, born: Double, start: CGPoint, velocity: CGVector, seed: UInt64, icon: NSImage?,
-         startCrumple: CGFloat, basket: BasketGeometry, canvas: CGSize) {
+         startCrumple: CGFloat, basket: BasketGeometry, canvas: CGSize, shredder: ShredderGeometry? = nil) {
         let g = TossedPaper.gravity
         let mouth = basket.mouth
         var kind = Kind.miss
@@ -209,7 +227,27 @@ struct TossedPaper: Identifiable {
         var impactPoint = start
         var direction: CGFloat = velocity.dx >= 0 ? -1 : 1
 
-        if start.y > mouth.midY && basket.silhouette.contains(start) {
+        // With the shredder out, a sheet that comes down onto its slot is caught there.
+        if let shredder {
+            let zone = shredder.catchZone
+            if zone.contains(start) {
+                kind = .shred
+                impactPoint = CGPoint(x: start.x, y: shredder.slot.midY)
+            } else {
+                let disc = velocity.dy * velocity.dy + 2 * g * (zone.midY - start.y)
+                let t = disc >= 0 ? (-velocity.dy + sqrt(disc)) / g : -1
+                let x = start.x + velocity.dx * max(0, t)
+                if t > 0 && x >= zone.minX && x <= zone.maxX {
+                    kind = .shred
+                    impactTime = Double(t)
+                    impactPoint = CGPoint(x: min(max(x, shredder.slot.minX + 8), shredder.slot.maxX - 8), y: shredder.slot.midY)
+                }
+            }
+        }
+
+        if kind == .shred {
+            // caught by the shredder; worked out above
+        } else if start.y > mouth.midY && basket.silhouette.contains(start) {
             kind = .make // let go right inside the basket
         } else {
             // When does the ball come back down through the rim's height?
@@ -256,12 +294,13 @@ struct TossedPaper: Identifiable {
         case .make: lifetime = impactTime + Paper.bounceDuration
         case .rim: lifetime = impactTime + exitTime(from: impactPoint, rebound)
         case .miss: lifetime = exitTime(from: start, velocity)
+        case .shred: lifetime = 600 // waits in the slot until the user confirms; see `PaperStage.resolveShred`
         }
     }
 
     func pose(at t: Double) -> PaperPose {
         let g = TossedPaper.gravity
-        let crumple = min(1, startCrumple + CGFloat(t / 0.18))
+        let crumple = kind == .shred ? startCrumple : min(1, startCrumple + CGFloat(t / 0.18))
         let spin = max(-14, min(14, velocity.dx * 0.006))
         let fade = 1 - clamp01((t - (lifetime - 0.3)) / 0.3)
 
@@ -277,6 +316,25 @@ struct TossedPaper: Identifiable {
 
         let d = CGFloat(t - impactTime)
         let spun = spin * CGFloat(impactTime)
+        if kind == .shred {
+            let waited = CGFloat((resolvedAt ?? born + t) - born) - CGFloat(impactTime)
+            let r = max(0, d - waited)
+            switch succeeded {
+            case true?:
+                let k = CGFloat(easeInOutCubic(clamp01(Double(r) / Paper.shredDuration)))
+                return PaperPose(center: CGPoint(x: impactPoint.x, y: impactPoint.y - 10 + 54 * k), rotation: 0, scale: 0.8,
+                                 crumple: 0, sheetScale: 1, opacity: 1, phase: .shredding)
+            case false?:
+                let position = CGPoint(x: impactPoint.x - 120 * r, y: impactPoint.y - 12 - 380 * r + 900 * r * r)
+                return PaperPose(center: position, rotation: -3 * r, scale: 0.8, crumple: crumple, sheetScale: 1,
+                                 opacity: 1 - clamp01((Double(r) - 0.5) / 0.4), phase: .loose)
+            case nil:
+                // Held in the jaws, quivering, while the confirmation is up.
+                let jiggle = CGFloat(sin(t * 38)) * 1.2
+                return PaperPose(center: CGPoint(x: impactPoint.x + jiggle, y: impactPoint.y - 10), rotation: jiggle * 0.01,
+                                 scale: 0.8, crumple: crumple, sheetScale: 1, opacity: 1, phase: .shredding)
+            }
+        }
         if kind == .rim {
             return PaperPose(center: ballistic(impactPoint, rebound, d), rotation: spun - 6 * d * direction,
                              scale: 0.8, crumple: 1, sheetScale: 1, opacity: fade, phase: .loose)
@@ -301,6 +359,10 @@ struct StageSnapshot {
     var pileCount = 0
     var lastLanding: Double = -100
     var pileClearedAt: Double?
+    var shredderShownAt: Double?
+    var shredderHiddenAt: Double?
+    var stripCount = 0
+    var lastShred: Double?
 }
 
 @MainActor @Observable
@@ -312,6 +374,10 @@ final class PaperStage {
     private(set) var pileCount = 0
     private(set) var lastLanding: Double = -100
     private(set) var pileClearedAt: Double?
+    private(set) var shredderShownAt: Double?
+    private(set) var shredderHiddenAt: Double?
+    private(set) var stripCount = 0
+    private(set) var lastShred: Double?
 
     @ObservationIgnored var canvasSize = CGSize(width: 1080, height: 720)
     @ObservationIgnored private var seed: UInt64 = 0x5EED
@@ -319,10 +385,71 @@ final class PaperStage {
 
     var snapshot: StageSnapshot {
         StageSnapshot(papers: papers, tossed: tossed, held: held, pileCount: pileCount,
-                      lastLanding: lastLanding, pileClearedAt: pileClearedAt)
+                      lastLanding: lastLanding, pileClearedAt: pileClearedAt,
+                      shredderShownAt: shredderShownAt, shredderHiddenAt: shredderHiddenAt,
+                      stripCount: stripCount, lastShred: lastShred)
     }
 
     private var basket: BasketGeometry { BasketGeometry(rect: BasketGeometry.rect(in: canvasSize)) }
+    private var shredder: ShredderGeometry { ShredderGeometry(rect: ShredderGeometry.rect(above: basket)) }
+
+    // The shredder
+
+    /// ⌥ held while dragging: bring the shredder out and flatten the sheet. Not for files that can't be deleted.
+    func setArmed(_ armed: Bool) {
+        guard var paper = held, !paper.blocked else { return }
+        let isArmed = paper.armedAt != nil
+        guard armed != isArmed else { return }
+        paper.armedAt = armed ? Date.timeIntervalSinceReferenceDate : nil
+        held = paper
+        refreshShredder()
+    }
+
+    /// The user confirmed (shredded) or cancelled a sheet waiting in the slot.
+    func resolveShred(_ id: UUID, shredded: Bool) {
+        guard let i = tossed.firstIndex(where: { $0.id == id }) else { return }
+        let now = Date.timeIntervalSinceReferenceDate
+        tossed[i].succeeded = shredded
+        tossed[i].resolvedAt = now
+        tossed[i].lifetime = now - tossed[i].born + (shredded ? Paper.shredDuration + 0.1 : 1.0)
+        keepTicking(for: 2.5)
+        if shredded { noteShred(after: 0.2) }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(shredded ? Paper.shredDuration + 0.1 : 1.0))
+            self?.tossed.removeAll { $0.id == id }
+            self?.refreshShredder()
+        }
+    }
+
+    private func noteShred(after delay: Double) {
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self else { return }
+            self.stripCount += 1
+            self.lastShred = Date.timeIntervalSinceReferenceDate
+        }
+    }
+
+    /// Out while it is armed or anything is headed for it; tucked away a moment after the last sheet.
+    private func refreshShredder() {
+        let now = Date.timeIntervalSinceReferenceDate
+        let wanted = held?.armedAt != nil || papers.contains(where: \.shred) || tossed.contains { $0.kind == .shred }
+        if wanted {
+            if shredderShownAt == nil { shredderShownAt = now }
+            shredderHiddenAt = nil
+            keepTicking(for: 0.4)
+        } else if shredderShownAt != nil && shredderHiddenAt == nil {
+            let hideAt = now + 0.9
+            shredderHiddenAt = hideAt
+            keepTicking(for: 1.3)
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1.2))
+                guard let self, self.shredderHiddenAt == hideAt else { return }
+                self.shredderShownAt = nil
+                self.shredderHiddenAt = nil
+            }
+        }
+    }
 
     private func nextSeed() -> UInt64 {
         seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
@@ -352,9 +479,15 @@ final class PaperStage {
         }
         let toss = TossedPaper(itemID: held.itemID, born: now, start: held.pose(at: now).center, velocity: v,
                                seed: held.seed, icon: held.icon, startCrumple: held.crumple(at: now),
-                               basket: basket, canvas: canvasSize)
+                               basket: basket, canvas: canvasSize, shredder: held.armedAt != nil ? shredder : nil)
         self.held = nil
         tossed.append(toss)
+        refreshShredder()
+        // A sheet in the shredder waits for the user; `resolveShred` finishes it.
+        guard toss.kind != .shred else {
+            keepTicking(for: 600)
+            return toss
+        }
         keepTicking(for: toss.lifetime + 1.7)
 
         Task { [weak self] in
@@ -379,20 +512,25 @@ final class PaperStage {
 
     // Automatic cleaning
 
-    func launch(from origin: CGPoint, icon: NSImage?, succeeded: Bool, onLand: @escaping @MainActor () -> Void) {
+    /// `shred`: the file was deleted for good, so the sheet goes into the shredder instead of the basket.
+    func launch(from origin: CGPoint, icon: NSImage?, succeeded: Bool, shred: Bool = false,
+                onLand: @escaping @MainActor () -> Void) {
         let paper = Paper(born: Date.timeIntervalSinceReferenceDate, origin: origin, basket: basket,
-                          succeeded: succeeded, seed: nextSeed(), icon: icon)
+                          succeeded: succeeded, seed: nextSeed(), icon: icon, shredder: shred ? shredder : nil)
         papers.append(paper)
+        refreshShredder()
         keepTicking(for: paper.lifetime + 1.7)
 
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(paper.landTime))
             guard let self else { return }
-            if succeeded { self.pileCount += 1 }
-            self.lastLanding = Date.timeIntervalSinceReferenceDate
+            if succeeded && !shred { self.pileCount += 1 }
+            if succeeded && shred { self.noteShred(after: 0.15) }
+            if !shred { self.lastLanding = Date.timeIntervalSinceReferenceDate }
             onLand()
             try? await Task.sleep(for: .seconds(paper.lifetime - paper.landTime))
             self.papers.removeAll { $0.id == paper.id }
+            self.refreshShredder()
         }
     }
 

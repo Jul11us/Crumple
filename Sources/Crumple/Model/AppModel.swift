@@ -70,6 +70,8 @@ struct Confirmation: Identifiable {
     let message: String
     let actionTitle: String
     let action: @MainActor () -> Void
+    /// Runs when the user backs out (Cancel or Esc).
+    var cancel: (@MainActor () -> Void)? = nil
 }
 
 @MainActor @Observable
@@ -235,6 +237,8 @@ final class AppModel {
     @ObservationIgnored var iconFrames: [String: CGRect] = [:]
     @ObservationIgnored var listViewport: CGRect = .zero
     @ObservationIgnored private var scanToken = 0
+    @ObservationIgnored private var flagsMonitor: Any?
+    @ObservationIgnored private var shredAllowed = true
     @ObservationIgnored private var noteToken = 0
 
     init() {
@@ -692,9 +696,9 @@ final class AppModel {
     private func confirmIfDeleting(bytes: Int64, then action: @escaping @MainActor () -> Void) {
         if mode == .delete && !Paths.isDemo {
             confirmation = Confirmation(
-                title: String(localized: "直接删除选中的文件？"),
-                message: String(localized: "将永久删除 \(bytes.byteString)，无法从废纸篓恢复。"),
-                actionTitle: String(localized: "删除"),
+                title: String(localized: "把选中的文件送进碎纸机？"),
+                message: String(localized: "将永久删除 \(bytes.byteString)，不经过废纸篓，无法撤销。"),
+                actionTitle: String(localized: "粉碎"),
                 action: action
             )
         } else {
@@ -740,7 +744,8 @@ final class AppModel {
                 }
                 let size = item.size
                 let reason = block ?? String(localized: "删除失败（受系统保护或正在使用）")
-                stage.launch(from: launchOrigin(for: item.id), icon: icons.icon(for: item), succeeded: ok) { [weak self] in
+                stage.launch(from: launchOrigin(for: item.id), icon: icons.icon(for: item), succeeded: ok,
+                             shred: mode == .delete) { [weak self] in
                     guard let self else { return }
                     if ok {
                         withAnimation(.snappy) { self.sessionFreed += size }
@@ -842,7 +847,8 @@ final class AppModel {
                 outcome = await Task.detached(priority: .userInitiated) { Cleaner.clean(item, mode: mode) }.value
             }
             let ok = outcome.removed
-            stage.launch(from: launchOrigin(for: item.id), icon: icons.icon(for: item), succeeded: ok) {
+            stage.launch(from: launchOrigin(for: item.id), icon: icons.icon(for: item), succeeded: ok,
+                         shred: mode == .delete) {
                 if ok {
                     withAnimation(.snappy) { self.sessionFreed += size }
                 } else {
@@ -869,22 +875,40 @@ final class AppModel {
         withAnimation(.easeOut(duration: 0.15)) {
             category.setStatus(item.id, .tossed)
         }
+        // Holding ⌥ brings out the shredder, even without moving the mouse. Apps always go to the Trash.
+        shredAllowed = category.kind != .applications
+        stage.setArmed(shredAllowed && NSEvent.modifierFlags.contains(.option))
+        flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            guard let self else { return event }
+            self.stage.setArmed(self.shredAllowed && event.modifierFlags.contains(.option))
+            return event
+        }
     }
 
     func moveToss(to location: CGPoint) {
         stage.moveHeld(to: location)
     }
 
+    private func stopWatchingFlags() {
+        if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
+        flagsMonitor = nil
+    }
+
     /// Lets go of the paper. Only a ball that lands in the basket gets its file cleaned;
     /// a miss or a rim shot puts the file back in the list. Files that can't be deleted
     /// (app still running, no permission, delete fails) are spat back out.
     func endToss(_ item: CleanItem, in category: CleanCategory, velocity: CGSize) {
+        stopWatchingFlags()
         guard let toss = stage.release(velocity: velocity) else { return }
         let mode = cleaningMode(for: category.kind)
         let size = item.size
         let id = item.id
         let block = blockReason(for: item)
         let note = block ?? String(localized: "\(item.name) 删不掉，投不进去")
+        if toss.kind == .shred {
+            shred(item, in: category, toss: toss, block: block)
+            return
+        }
         Task {
             if toss.kind == .make {
                 var outcome = Cleaner.Outcome()
@@ -912,6 +936,48 @@ final class AppModel {
                 }
             }
         }
+    }
+
+    /// A sheet caught by the shredder waits in the slot until the user confirms. Shredding skips the Trash,
+    /// so it can't be undone; cancelling puts the file back in the list.
+    private func shred(_ item: CleanItem, in category: CleanCategory, toss: TossedPaper, block: String?) {
+        let id = item.id
+        func putBack() {
+            stage.resolveShred(toss.id, shredded: false)
+            Task {
+                try? await Task.sleep(for: .seconds(0.9))
+                withAnimation(.easeOut(duration: 0.25)) { category.setStatus(id, .ready) }
+            }
+        }
+        if let block {
+            putBack()
+            showNote(block)
+            return
+        }
+        confirmation = Confirmation(
+            title: String(localized: "送进碎纸机？"),
+            message: String(localized: "“\(item.name)”（\(item.size.byteString)）会被永久删除，不经过废纸篓，无法撤销。"),
+            actionTitle: String(localized: "粉碎"),
+            action: { [weak self] in
+                guard let self else { return }
+                Task {
+                    let outcome = await Task.detached(priority: .userInitiated) { Cleaner.clean(item, mode: .delete) }.value
+                    guard outcome.removed else {
+                        putBack()
+                        self.showNote(String(localized: "\(item.name) 删不掉，投不进去"))
+                        return
+                    }
+                    self.stage.resolveShred(toss.id, shredded: true)
+                    withAnimation(.snappy) {
+                        self.sessionFreed += item.size
+                        category.setStatus(id, .cleaned)
+                    }
+                    self.record(CleanSummary(source: .manual, mode: .delete, count: 1, bytes: item.size))
+                    self.refreshDisk()
+                }
+            },
+            cancel: { putBack() }
+        )
     }
 
     // MARK: - History, disk, trash

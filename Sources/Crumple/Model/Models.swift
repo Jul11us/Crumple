@@ -286,7 +286,8 @@ enum CleanMode: String, CaseIterable, Identifiable, Codable {
     case trash, delete
 
     var id: String { rawValue }
-    var title: String { self == .trash ? String(localized: "移到废纸篓") : String(localized: "直接删除") }
+    // Crumpled into the basket can be smoothed out again; shredded can't.
+    var title: String { self == .trash ? String(localized: "扔进纸篓") : String(localized: "送进碎纸机") }
 }
 
 /// What kind of large file this is, for the filter chips.

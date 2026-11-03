@@ -242,6 +242,34 @@ enum DevTools {
         model.monitor.stop()
     }
 
+    /// The shredder at a few moments: a sheet flying in, going through the slot, strips falling.
+    @MainActor
+    static func renderShredder(to dir: URL) {
+        _ = NSApplication.shared
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let size = CGSize(width: 420, height: 420)
+        let basket = BasketGeometry(rect: BasketGeometry.rect(in: size))
+        let shredder = ShredderGeometry(rect: ShredderGeometry.rect(above: basket))
+        let icon = NSWorkspace.shared.icon(forFile: "/Applications/Safari.app")
+        let paper = Paper(born: 0, origin: CGPoint(x: 70, y: 300), basket: basket, succeeded: true, seed: 3, icon: icon,
+                          shredder: shredder)
+        let moments = [0.4, paper.landTime - 0.15, paper.landTime + 0.22, paper.landTime + 0.6]
+        for (scheme, name) in [(ColorScheme.light, "light"), (.dark, "dark")] {
+            NSApp.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+            let row = HStack(spacing: 8) {
+                ForEach(moments, id: \.self) { t in
+                    let snapshot = StageSnapshot(papers: [paper], pileCount: 4, shredderShownAt: -10,
+                                                 stripCount: 6, lastShred: t > paper.landTime ? paper.landTime + 0.15 : nil)
+                    Canvas { context, size in StageRenderer.draw(context, size: size, now: t, snapshot: snapshot) }
+                        .frame(width: size.width, height: size.height)
+                        .background(Theme.base)
+                }
+            }
+            .environment(\.colorScheme, scheme)
+            writePNG(row, scale: 1, to: dir.appendingPathComponent("shredder-\(name).png"))
+        }
+    }
+
     /// Stills of the paper animation: a strobe of whole throws, and the crumple stages up close.
     @MainActor
     static func renderPreviews(to dir: URL) {

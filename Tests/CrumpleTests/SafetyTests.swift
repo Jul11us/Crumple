@@ -253,6 +253,24 @@ struct TossTests {
         #expect(toss(600, -323).kind == .miss)
     }
 
+    @Test("按住 ⌥ 时落到碎纸机口才算粉碎，松开 ⌥ 同样的一投进纸篓")
+    func shredderOnlyCatchesWhenArmed() {
+        let shredder = ShredderGeometry(rect: ShredderGeometry.rect(above: basket))
+        let above = CGPoint(x: shredder.slot.midX, y: shredder.slot.midY - 120)
+        let armed = TossedPaper(itemID: "", born: 0, start: above, velocity: .zero, seed: 1, icon: nil,
+                                startCrumple: 0, basket: basket, canvas: size, shredder: shredder)
+        #expect(armed.kind == .shred)
+        #expect(toss(0, 0, from: above).kind == .make)
+    }
+
+    @Test("按着 ⌥ 但扔偏了，不会被当成粉碎")
+    func armedMissIsNotShred() {
+        let shredder = ShredderGeometry(rect: ShredderGeometry.rect(above: basket))
+        let wide = TossedPaper(itemID: "", born: 0, start: CGPoint(x: 300, y: 250), velocity: CGVector(dx: 600, dy: -323),
+                               seed: 1, icon: nil, startCrumple: 0, basket: basket, canvas: size, shredder: shredder)
+        #expect(wide.kind != .shred)
+    }
+
     @Test("直接放进篓里也算投中")
     func droppingInsideCounts() {
         let inside = CGPoint(x: basket.rect.midX, y: basket.rect.midY + 10)

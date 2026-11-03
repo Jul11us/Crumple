@@ -376,6 +376,83 @@ enum BasketArt {
 
 // MARK: - Whole stage
 
+// MARK: - Paper shredder
+
+/// The shredder that appears above the basket: a dark head with a slot on top, over a wire bin.
+/// What goes in here is deleted for good, so it only shows up when asked for.
+struct ShredderGeometry {
+    static let size = CGSize(width: 92, height: 96)
+    static let gap: CGFloat = 26
+
+    static func rect(above basket: BasketGeometry) -> CGRect {
+        CGRect(x: basket.rect.midX - size.width / 2, y: basket.rect.minY - gap - size.height,
+               width: size.width, height: size.height)
+    }
+
+    let rect: CGRect
+
+    var head: CGRect { CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height * 0.34) }
+    var bin: CGRect { CGRect(x: rect.minX + 7, y: head.maxY - 2, width: rect.width - 14, height: rect.maxY - head.maxY + 2) }
+    /// The opening along the top edge of the head.
+    var slot: CGRect { CGRect(x: head.minX + 14, y: head.minY - 2, width: head.width - 28, height: 5) }
+    /// Where a throw has to come down to be caught by the slot.
+    var catchZone: CGRect { slot.insetBy(dx: -6, dy: -6) }
+}
+
+enum ShredderArt {
+    static func draw(_ g: GraphicsContext, _ s: ShredderGeometry, strips: Int, shreddingSince: Double?, now: Double) {
+        let ink = Theme.primary
+        // The bin: an open wire box that shows the strips inside.
+        let bin = Path(roundedRect: s.bin, cornerRadius: 4)
+        g.fill(bin, with: .color(Theme.raised))
+        var bars = Path()
+        for i in 1..<7 {
+            let x = s.bin.minX + s.bin.width * CGFloat(i) / 7
+            bars.move(to: CGPoint(x: x, y: s.bin.minY + 4))
+            bars.addLine(to: CGPoint(x: x, y: s.bin.maxY - 3))
+        }
+        g.stroke(bars, with: .color(ink.opacity(0.18)), lineWidth: 1)
+
+        // Strips already in the bin, then the ones falling out of the head right now.
+        var rng = SeededRandom(91)
+        let stripWidth: CGFloat = 4
+        for i in 0..<min(strips, 18) {
+            let x = s.bin.minX + 6 + CGFloat(i % 9) * (s.bin.width - 12) / 9 + rng.range(-1, 1)
+            let h = rng.range(18, 34)
+            let y = s.bin.maxY - 4 - h - CGFloat(i / 9) * 6
+            g.fill(Path(roundedRect: CGRect(x: x, y: y, width: stripWidth, height: h), cornerRadius: 1), with: .color(.white))
+            g.stroke(Path(roundedRect: CGRect(x: x, y: y, width: stripWidth, height: h), cornerRadius: 1),
+                     with: .color(.black.opacity(0.35)), lineWidth: 0.7)
+        }
+        if let since = shreddingSince, now - since < 0.9 {
+            let k = CGFloat(clamp01((now - since) / 0.9))
+            for i in 0..<7 {
+                let x = s.slot.minX + CGFloat(i) * (s.slot.width - stripWidth) / 6
+                let length = 10 + 30 * k
+                let rect = CGRect(x: x, y: s.head.maxY - 2, width: stripWidth, height: length)
+                g.fill(Path(roundedRect: rect, cornerRadius: 1), with: .color(.white.opacity(Double(1 - k * 0.3))))
+                g.stroke(Path(roundedRect: rect, cornerRadius: 1), with: .color(.black.opacity(0.35)), lineWidth: 0.7)
+            }
+        }
+        g.stroke(bin, with: .color(ink), lineWidth: 2)
+
+        // The head, with the slot along its top and a small light that is on while it runs.
+        let head = Path(roundedRect: s.head, cornerRadius: 7)
+        g.fill(head, with: .color(ink))
+        g.fill(Path(roundedRect: s.slot, cornerRadius: 2.5), with: .color(Theme.base.opacity(0.85)))
+        let running = shreddingSince.map { now - $0 < 0.9 } ?? false
+        let light = CGRect(x: s.head.maxX - 14, y: s.head.midY + 2, width: 5, height: 5)
+        g.fill(Path(ellipseIn: light), with: .color(running ? Theme.danger : Theme.base.opacity(0.35)))
+        var grill = Path()
+        for i in 0..<3 {
+            let y = s.head.midY + 1 + CGFloat(i) * 4
+            grill.move(to: CGPoint(x: s.head.minX + 12, y: y))
+            grill.addLine(to: CGPoint(x: s.head.minX + 34, y: y))
+        }
+        g.stroke(grill, with: .color(Theme.base.opacity(0.3)), lineWidth: 1.2)
+    }
+}
+
 enum StageRenderer {
     static func draw(_ context: GraphicsContext, size: CGSize, now: Double, snapshot: StageSnapshot) {
         let basket = BasketGeometry(rect: BasketGeometry.rect(in: size))
@@ -393,8 +470,33 @@ enum StageRenderer {
             bg.translateBy(x: -pivot.x, y: -pivot.y)
         }
 
+        // The shredder slides down into place above the basket when it's wanted, and back up after.
+        let shredder = ShredderGeometry(rect: ShredderGeometry.rect(above: basket))
+        var shredderShown = 0.0
+        if let shown = snapshot.shredderShownAt {
+            shredderShown = easeOutCubic(clamp01((now - shown) / 0.25))
+            if let hidden = snapshot.shredderHiddenAt, now > hidden {
+                shredderShown *= 1 - easeInOutCubic(clamp01((now - hidden) / 0.25))
+            }
+        }
+        if shredderShown > 0.01 {
+            var sg = context
+            sg.opacity = shredderShown
+            sg.translateBy(x: 0, y: -16 * CGFloat(1 - shredderShown))
+            if let held = snapshot.held, held.armedAt != nil {
+                let distance = hypot(held.location.x - shredder.slot.midX, held.location.y - shredder.slot.midY)
+                let glow = max(0, 1 - Double(distance) / 220) * 0.5
+                sg.drawLayer { layer in
+                    layer.addFilter(.blur(radius: 8))
+                    layer.fill(Path(roundedRect: shredder.slot.insetBy(dx: -8, dy: -6), cornerRadius: 6),
+                               with: .color(Theme.danger.opacity(glow)))
+                }
+            }
+            ShredderArt.draw(sg, shredder, strips: snapshot.stripCount, shreddingSince: snapshot.lastShred, now: now)
+        }
+
         // The rim glows when a paper in hand gets close: green to aim, red if it won't go in.
-        if let held = snapshot.held {
+        if let held = snapshot.held, held.armedAt == nil {
             let distance = hypot(held.location.x - basket.mouth.midX, held.location.y - basket.mouth.midY)
             let glow = max(0, 1 - Double(distance) / 220) * 0.6
             if glow > 0 {
@@ -417,8 +519,12 @@ enum StageRenderer {
         var inside = bg
         inside.clip(to: basket.silhouette)
         var inFront: [(pose: PaperPose, seed: UInt64, icon: NSImage?, tint: Color?)] = []
+        // A sheet going into the shredder disappears below the slot.
+        var intoSlot = context
+        intoSlot.clip(to: Path(CGRect(x: 0, y: 0, width: size.width, height: shredder.slot.midY)))
         func place(_ pose: PaperPose, seed: UInt64, icon: NSImage?) {
             switch pose.phase {
+            case .shredding: PaperArt.draw(intoSlot, pose: pose, seed: seed, icon: icon)
             case .sinking: PaperArt.draw(inside, pose: pose, seed: seed, icon: nil)
             case .bouncing: inFront.append((pose, seed, nil, .red))
             case .loose: inFront.append((pose, seed, icon, nil))

@@ -316,7 +316,7 @@ private struct ReviewHeader: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Label("按住任意一行拖起来，可以亲手把它甩进右下角的纸篓", systemImage: "hand.draw.fill")
+                Label("拖起任意一行，亲手甩进右下角的纸篓；按住 ⌥ 会出现碎纸机，永久删除", systemImage: "hand.draw.fill")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(accent)
                     .padding(.top, 2)

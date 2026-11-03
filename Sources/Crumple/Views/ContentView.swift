@@ -78,7 +78,7 @@ struct ContentView: View {
             presenting: model.confirmation
         ) { confirmation in
             Button(confirmation.actionTitle, role: .destructive) { confirmation.action() }
-            Button("取消", role: .cancel) {}
+            Button("取消", role: .cancel) { confirmation.cancel?() }
         } message: { confirmation in
             Text(confirmation.message)
         }
