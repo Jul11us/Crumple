@@ -202,6 +202,8 @@ struct BasketGeometry {
     static let bottomInset: CGFloat = 20
     /// Space the bottom bar leaves free for the basket.
     static var reservedTrailing: CGFloat { trailingInset + size.width + 18 }
+    /// Space a page leaves at its bottom so its last rows can scroll clear of the basket.
+    static var clearance: CGFloat { bottomInset + size.height + 16 }
 
     static func rect(in canvas: CGSize) -> CGRect {
         CGRect(x: canvas.width - trailingInset - size.width, y: canvas.height - bottomInset - size.height,
@@ -256,12 +258,13 @@ struct BasketStyle {
     var interior: Color
     var shadow: Double
 
+    /// Charcoal wire, like the hoop in the logo (pale wire on dark paper).
     static let app = BasketStyle(
-        rim: Color(red: 0.08, green: 0.52, blue: 0.47),
-        slat: Color(red: 0.12, green: 0.60, blue: 0.54),
-        wall: Color(red: 0.16, green: 0.66, blue: 0.59),
-        interior: Color(red: 0.04, green: 0.28, blue: 0.27),
-        shadow: 0.18
+        rim: .themed(\.basketRim),
+        slat: .themed(\.basketSlat),
+        wall: .themed(\.basketWall),
+        interior: .themed(\.basketInside),
+        shadow: 0.14
     )
     static let icon = BasketStyle(
         rim: .white,
@@ -375,9 +378,96 @@ enum BasketArt {
 
 // MARK: - Whole stage
 
+// MARK: - Paper shredder
+
+/// The shredder that appears above the basket: a dark head with a slot on top, over a wire bin.
+/// What goes in here is deleted for good, so it only shows up when asked for.
+struct ShredderGeometry {
+    static let size = CGSize(width: 92, height: 96)
+    static let gap: CGFloat = 26
+
+    static func rect(above basket: BasketGeometry) -> CGRect {
+        CGRect(x: basket.rect.midX - size.width / 2, y: basket.rect.minY - gap - size.height,
+               width: size.width, height: size.height)
+    }
+
+    let rect: CGRect
+
+    var head: CGRect { CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height * 0.34) }
+    var bin: CGRect { CGRect(x: rect.minX + 7, y: head.maxY - 2, width: rect.width - 14, height: rect.maxY - head.maxY + 2) }
+    /// The opening along the top edge of the head.
+    var slot: CGRect { CGRect(x: head.minX + 14, y: head.minY - 2, width: head.width - 28, height: 5) }
+    /// Where a throw has to come down to be caught by the slot.
+    var catchZone: CGRect { slot.insetBy(dx: -6, dy: -6) }
+}
+
+enum ShredderArt {
+    static func draw(_ g: GraphicsContext, _ s: ShredderGeometry, strips: Int, shreddingSince: Double?, now: Double) {
+        let ink = Theme.primary
+        // The bin: an open wire box that shows the strips inside.
+        let bin = Path(roundedRect: s.bin, cornerRadius: 4)
+        g.fill(bin, with: .color(Theme.raised))
+        var bars = Path()
+        for i in 1..<7 {
+            let x = s.bin.minX + s.bin.width * CGFloat(i) / 7
+            bars.move(to: CGPoint(x: x, y: s.bin.minY + 4))
+            bars.addLine(to: CGPoint(x: x, y: s.bin.maxY - 3))
+        }
+        g.stroke(bars, with: .color(ink.opacity(0.18)), lineWidth: 1)
+
+        // Strips already in the bin, then the ones falling out of the head right now.
+        var rng = SeededRandom(91)
+        let stripWidth: CGFloat = 4
+        for i in 0..<min(strips, 18) {
+            let x = s.bin.minX + 6 + CGFloat(i % 9) * (s.bin.width - 12) / 9 + rng.range(-1, 1)
+            let h = rng.range(18, 34)
+            let y = s.bin.maxY - 4 - h - CGFloat(i / 9) * 6
+            g.fill(Path(roundedRect: CGRect(x: x, y: y, width: stripWidth, height: h), cornerRadius: 1), with: .color(.white))
+            g.stroke(Path(roundedRect: CGRect(x: x, y: y, width: stripWidth, height: h), cornerRadius: 1),
+                     with: .color(.black.opacity(0.35)), lineWidth: 0.7)
+        }
+        if let since = shreddingSince, now - since < 0.9 {
+            let k = CGFloat(clamp01((now - since) / 0.9))
+            for i in 0..<7 {
+                let x = s.slot.minX + CGFloat(i) * (s.slot.width - stripWidth) / 6
+                let length = 10 + 30 * k
+                let rect = CGRect(x: x, y: s.head.maxY - 2, width: stripWidth, height: length)
+                g.fill(Path(roundedRect: rect, cornerRadius: 1), with: .color(.white.opacity(Double(1 - k * 0.3))))
+                g.stroke(Path(roundedRect: rect, cornerRadius: 1), with: .color(.black.opacity(0.35)), lineWidth: 0.7)
+            }
+        }
+        g.stroke(bin, with: .color(ink), lineWidth: 2)
+
+        // The head, with the slot along its top and a small light that is on while it runs.
+        let head = Path(roundedRect: s.head, cornerRadius: 7)
+        g.fill(head, with: .color(ink))
+        g.fill(Path(roundedRect: s.slot, cornerRadius: 2.5), with: .color(Theme.base.opacity(0.85)))
+        let running = shreddingSince.map { now - $0 < 0.9 } ?? false
+        let light = CGRect(x: s.head.maxX - 14, y: s.head.midY + 2, width: 5, height: 5)
+        g.fill(Path(ellipseIn: light), with: .color(running ? Theme.danger : Theme.base.opacity(0.35)))
+        var grill = Path()
+        for i in 0..<3 {
+            let y = s.head.midY + 1 + CGFloat(i) * 4
+            grill.move(to: CGPoint(x: s.head.minX + 12, y: y))
+            grill.addLine(to: CGPoint(x: s.head.minX + 34, y: y))
+        }
+        g.stroke(grill, with: .color(Theme.base.opacity(0.3)), lineWidth: 1.2)
+    }
+}
+
 enum StageRenderer {
+    static let pourDuration = 1.5
+
+    /// How far the basket leans over while it is emptied: over, a pause while it pours, back up.
+    static func tipAngle(_ t: Double) -> Double {
+        if t < 0.32 { return -1.2 * easeInOutCubic(t / 0.32) }
+        if t < 0.9 { return -1.2 }
+        return -1.2 * (1 - easeInOutCubic(clamp01((t - 0.9) / 0.45)))
+    }
+
     static func draw(_ context: GraphicsContext, size: CGSize, now: Double, snapshot: StageSnapshot) {
         let basket = BasketGeometry(rect: BasketGeometry.rect(in: size))
+        let pourT = snapshot.pileClearedAt.map { now - $0 }
 
         // The basket wobbles and squashes a little each time something lands.
         var bg = context
@@ -392,8 +482,33 @@ enum StageRenderer {
             bg.translateBy(x: -pivot.x, y: -pivot.y)
         }
 
+        // The shredder slides down into place above the basket when it's wanted, and back up after.
+        let shredder = ShredderGeometry(rect: ShredderGeometry.rect(above: basket))
+        var shredderShown = 0.0
+        if let shown = snapshot.shredderShownAt {
+            shredderShown = easeOutCubic(clamp01((now - shown) / 0.25))
+            if let hidden = snapshot.shredderHiddenAt, now > hidden {
+                shredderShown *= 1 - easeInOutCubic(clamp01((now - hidden) / 0.25))
+            }
+        }
+        if shredderShown > 0.01 {
+            var sg = context
+            sg.opacity = shredderShown
+            sg.translateBy(x: 0, y: -16 * CGFloat(1 - shredderShown))
+            if let held = snapshot.held, held.armedAt != nil {
+                let distance = hypot(held.location.x - shredder.slot.midX, held.location.y - shredder.slot.midY)
+                let glow = max(0, 1 - Double(distance) / 220) * 0.5
+                sg.drawLayer { layer in
+                    layer.addFilter(.blur(radius: 8))
+                    layer.fill(Path(roundedRect: shredder.slot.insetBy(dx: -8, dy: -6), cornerRadius: 6),
+                               with: .color(Theme.danger.opacity(glow)))
+                }
+            }
+            ShredderArt.draw(sg, shredder, strips: snapshot.stripCount, shreddingSince: snapshot.lastShred, now: now)
+        }
+
         // The rim glows when a paper in hand gets close: green to aim, red if it won't go in.
-        if let held = snapshot.held {
+        if let held = snapshot.held, held.armedAt == nil {
             let distance = hypot(held.location.x - basket.mouth.midX, held.location.y - basket.mouth.midY)
             let glow = max(0, 1 - Double(distance) / 220) * 0.6
             if glow > 0 {
@@ -405,19 +520,28 @@ enum StageRenderer {
             }
         }
 
-        BasketArt.drawBack(bg, basket, .app)
-        var pileOpacity = 1.0
-        if let cleared = snapshot.pileClearedAt {
-            pileOpacity = 1 - clamp01((now - cleared) / 0.5)
+        // Emptying the Trash: the basket tips over to the left about its bottom-left corner.
+        if let t = pourT {
+            let pivot = CGPoint(x: basket.base.minX, y: basket.rect.maxY)
+            bg.translateBy(x: pivot.x, y: pivot.y)
+            bg.rotate(by: .radians(tipAngle(t)))
+            bg.translateBy(x: -pivot.x, y: -pivot.y)
         }
+
+        BasketArt.drawBack(bg, basket, .app)
+        let pileOpacity = pourT.map { $0 < 0.3 ? 1.0 : 0 } ?? 1
         BasketArt.drawPile(bg, basket, count: snapshot.pileCount, opacity: pileOpacity)
 
         // Papers going into the basket are clipped by it; the rest are drawn after the front wall.
         var inside = bg
         inside.clip(to: basket.silhouette)
         var inFront: [(pose: PaperPose, seed: UInt64, icon: NSImage?, tint: Color?)] = []
+        // A sheet going into the shredder disappears below the slot.
+        var intoSlot = context
+        intoSlot.clip(to: Path(CGRect(x: 0, y: 0, width: size.width, height: shredder.slot.midY)))
         func place(_ pose: PaperPose, seed: UInt64, icon: NSImage?) {
             switch pose.phase {
+            case .shredding: PaperArt.draw(intoSlot, pose: pose, seed: seed, icon: icon)
             case .sinking: PaperArt.draw(inside, pose: pose, seed: seed, icon: nil)
             case .bouncing: inFront.append((pose, seed, nil, .red))
             case .loose: inFront.append((pose, seed, icon, nil))
@@ -436,6 +560,33 @@ enum StageRenderer {
         }
 
         BasketArt.drawFront(bg, basket, .app)
+
+        // The balls tumbling out of the tipped basket and off the bottom of the window.
+        if let t = pourT, t > 0.24 {
+            let pivot = CGPoint(x: basket.base.minX, y: basket.rect.maxY)
+            let a = CGFloat(tipAngle(0.32))
+            let mouth = CGPoint(x: basket.mouth.midX, y: basket.mouth.midY)
+            let dx = mouth.x - pivot.x, dy = mouth.y - pivot.y
+            let lip = CGPoint(x: pivot.x + dx * cos(a) - dy * sin(a), y: pivot.y + dx * sin(a) + dy * cos(a))
+            for i in 0..<min(snapshot.poured, 14) {
+                var rng = SeededRandom(UInt64(i) &* 2654435761 &+ 5)
+                let s = CGFloat(t - 0.24 - Double(i) * 0.035)
+                guard s > 0 else { continue }
+                let v = CGVector(dx: -rng.range(120, 300), dy: -rng.range(40, 200))
+                let center = CGPoint(x: lip.x + rng.range(-10, 10) + v.dx * s,
+                                     y: lip.y + rng.range(-6, 6) + v.dy * s + 0.5 * TossedPaper.gravity * s * s)
+                guard center.y < size.height + 30 else { continue }
+                let pose = PaperPose(center: center, rotation: rng.range(0, 6) + s * 8, scale: 0.72, crumple: 1,
+                                     sheetScale: 1, opacity: 1, phase: .loose)
+                PaperArt.draw(context, pose: pose, seed: rng.next(), icon: nil)
+            }
+        }
+        for paper in snapshot.returning {
+            let t = now - paper.born
+            guard t >= 0, t <= ReturningPaper.duration else { continue }
+            PaperArt.draw(context, pose: paper.pose(at: t), seed: paper.seed, icon: paper.icon)
+        }
+
         for paper in inFront {
             PaperArt.draw(context, pose: paper.pose, seed: paper.seed, icon: paper.icon, tint: paper.tint)
         }
