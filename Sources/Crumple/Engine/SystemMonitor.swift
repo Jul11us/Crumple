@@ -58,6 +58,8 @@ final class SystemMonitor {
     private(set) var apps: [AppUsage] = []
     private(set) var processCount = 0
     private(set) var hasSample = false
+    /// The overall score, eased toward each new reading so it doesn't jump every refresh.
+    private(set) var smoothedHealth: Double?
     let cores = ProcessInfo.processInfo.activeProcessorCount
 
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -131,6 +133,8 @@ final class SystemMonitor {
             apps = Self.group(rows)
         }
         round += 1
+        let target = HealthScore.combine(healthFactors)
+        smoothedHealth = smoothedHealth.map { $0 + 0.3 * (target - $0) } ?? target
         hasSample = true
     }
 
@@ -336,47 +340,117 @@ final class SystemMonitor {
 
     // MARK: - Health
 
-    /// A rough 0–100 score with the main thing dragging it down.
+    /// The five parts of the score, each 0–100, from the latest readings.
+    var healthFactors: [HealthScore.Factor] {
+        var factors = [
+            HealthScore.memory(pressure: memory.pressure, swap: memory.swap),
+            HealthScore.cpu(history: cpuHistory, load: load, cores: cores),
+            HealthScore.disk(available: disk?.available ?? 0, total: disk?.total ?? 0),
+            HealthScore.thermal(thermal),
+        ]
+        if let health = battery?.health { factors.append(HealthScore.battery(health: health)) }
+        return factors
+    }
+
+    /// The overall score (smoothed between samples), what it means, and the weakest part.
     var health: (score: Int, label: String, note: String) {
-        var score = 100
-        var notes: [String] = []
-        if memory.pressure >= 4 {
-            score -= 25
-            notes.append(String(localized: "内存压力很大"))
-        } else if memory.pressure >= 2 || memory.fraction > 0.85 {
-            score -= 12
-            notes.append(String(localized: "内存压力偏高"))
+        let factors = healthFactors
+        let score = Int((smoothedHealth ?? HealthScore.combine(factors)).rounded())
+        let weakest = factors.min { $0.score < $1.score }
+        let note = weakest.map { $0.score < 85 ? $0.note : String(localized: "一切正常") } ?? String(localized: "一切正常")
+        return (score, HealthScore.label(score), note)
+    }
+}
+
+/// How healthy the Mac is right now, out of 100.
+///
+/// Each part is scored on a smooth curve rather than by fixed deductions, the parts are weighted
+/// (memory 30%, disk 25%, CPU 20%, temperature 15%, battery 10%), and the weakest part caps the
+/// total at its own score + 35, so one real problem can't be averaged away.
+enum HealthScore {
+    struct Factor: Identifiable, Equatable {
+        let title: String
+        let score: Int
+        let weight: Double
+        /// What is wrong, shown when this part is the weakest.
+        let note: String
+        var id: String { title }
+    }
+
+    static func combine(_ factors: [Factor]) -> Double {
+        guard !factors.isEmpty else { return 100 }
+        let total = factors.reduce(0) { $0 + $1.weight }
+        let mean = factors.reduce(0) { $0 + Double($1.score) * $1.weight } / total
+        let worst = Double(factors.map(\.score).min() ?? 100)
+        return min(mean, worst + 35)
+    }
+
+    static func label(_ score: Int) -> String {
+        score >= 90 ? String(localized: "很好")
+            : score >= 75 ? String(localized: "良好")
+            : score >= 55 ? String(localized: "一般")
+            : String(localized: "需要关注")
+    }
+
+    /// Straight lines between the given (input, score) points.
+    static func curve(_ x: Double, _ points: [(Double, Double)]) -> Double {
+        guard let first = points.first, let last = points.last else { return 100 }
+        if x <= first.0 { return first.1 }
+        if x >= last.0 { return last.1 }
+        for (a, b) in zip(points, points.dropFirst()) where x <= b.0 {
+            return a.1 + (b.1 - a.1) * (x - a.0) / (b.0 - a.0)
         }
-        if memory.swap > 2_000_000_000 { score -= 5 }
-        if cpu > 0.85 {
-            score -= 10
-            notes.append(String(localized: "CPU 很忙"))
+        return last.1
+    }
+
+    /// macOS fills memory on purpose, so how full it is says little. The kernel's pressure level
+    /// and how much has spilled into swap are what slow a Mac down.
+    static func memory(pressure: Int, swap: Int64) -> Factor {
+        let base: Double = pressure >= 4 ? 25 : pressure >= 2 ? 62 : 100
+        let swapGB = Double(swap) / 1_000_000_000
+        let score = max(5, base - min(30, max(0, swapGB - 1) * 7))
+        let note = pressure >= 4 ? String(localized: "内存压力很大")
+            : pressure >= 2 ? String(localized: "内存压力偏高")
+            : String(localized: "交换空间用得多")
+        return Factor(title: String(localized: "内存"), score: Int(score.rounded()), weight: 0.30, note: note)
+    }
+
+    /// The last half minute, not this instant: a short spike is normal, staying busy is not.
+    static func cpu(history: [Double], load: Double, cores: Int) -> Factor {
+        let recent = history.suffix(20)
+        let average = recent.isEmpty ? 0 : recent.reduce(0, +) / Double(recent.count)
+        var score = curve(average, [(0.5, 100), (0.8, 70), (1.0, 40)])
+        let perCore = load / Double(max(cores, 1))
+        if perCore > 1 { score -= min(20, (perCore - 1) * 20) }
+        return Factor(title: "CPU", score: Int(max(5, score).rounded()), weight: 0.20, note: String(localized: "CPU 一直很忙"))
+    }
+
+    static func disk(available: Int64, total: Int64) -> Factor {
+        guard total > 0 else { return Factor(title: String(localized: "磁盘"), score: 100, weight: 0.25, note: "") }
+        let free = Double(available) / Double(total)
+        var score = curve(free, [(0, 0), (0.02, 15), (0.05, 40), (0.10, 70), (0.20, 100)])
+        // A big disk can be 10% free and still have plenty; a small one can't afford that.
+        if available < 5_000_000_000 { score = min(score, 35) } else if available < 10_000_000_000 { score = min(score, 60) }
+        let note = score < 60 ? String(localized: "磁盘快满了") : String(localized: "磁盘空间偏少")
+        return Factor(title: String(localized: "磁盘"), score: Int(score.rounded()), weight: 0.25, note: note)
+    }
+
+    static func thermal(_ state: ProcessInfo.ThermalState) -> Factor {
+        let (score, note): (Int, String) = switch state {
+        case .nominal: (100, "")
+        case .fair: (75, String(localized: "温度偏高"))
+        case .serious: (40, String(localized: "温度很高"))
+        case .critical: (10, String(localized: "温度过高"))
+        @unknown default: (100, "")
         }
-        if let disk, disk.total > 0 {
-            let free = Double(disk.available) / Double(disk.total)
-            if free < 0.1 {
-                score -= 18
-                notes.append(String(localized: "磁盘快满了"))
-            } else if free < 0.2 {
-                score -= 8
-                notes.append(String(localized: "磁盘空间偏少"))
-            }
-        }
-        switch thermal {
-        case .serious:
-            score -= 15
-            notes.append(String(localized: "温度偏高"))
-        case .critical:
-            score -= 30
-            notes.append(String(localized: "温度过高"))
-        default: break
-        }
-        if let health = battery?.health, health < 80 {
-            score -= 8
-            notes.append(String(localized: "电池已经老化"))
-        }
-        score = max(0, score)
-        return (score, score >= 85 ? String(localized: "良好") : score >= 70 ? String(localized: "一般") : String(localized: "需要关注"), notes.first ?? String(localized: "一切正常"))
+        return Factor(title: String(localized: "温度"), score: score, weight: 0.15, note: note)
+    }
+
+    /// Battery health as macOS reports it (100% = like new).
+    static func battery(health: Int) -> Factor {
+        let score = curve(Double(health), [(50, 20), (70, 60), (80, 85), (90, 100)])
+        return Factor(title: String(localized: "电池"), score: Int(score.rounded()), weight: 0.10,
+                      note: String(localized: "电池已经老化"))
     }
 }
 

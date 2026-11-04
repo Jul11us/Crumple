@@ -67,7 +67,10 @@ enum Scanner {
             ) else { continue }
             for case let url as URL in enumerator {
                 checked += 1
-                if checked % 400 == 0 { progress(checked) }
+                if checked % 400 == 0 {
+                    if Task.isCancelled { return [] }
+                    progress(checked)
+                }
                 guard let values = try? url.resourceValues(forKeys: Set(keys)) else { continue }
                 if values.isPackage == true { continue }
                 guard values.isRegularFile == true else { continue }
