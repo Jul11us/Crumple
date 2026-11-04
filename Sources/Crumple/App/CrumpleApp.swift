@@ -31,6 +31,8 @@ struct CrumpleApp: App {
     var body: some Scene {
         Window("Crumple", id: "main") {
             ContentView()
+                .tint(Theme.accent)
+                .id(model.appearance)
                 .environment(model)
         }
         .windowStyle(.hiddenTitleBar)
@@ -40,6 +42,8 @@ struct CrumpleApp: App {
 
         Window("关于 Crumple", id: "about") {
             AboutView()
+                .tint(Theme.accent)
+                .id(model.appearance)
                 .environment(model)
         }
         .windowStyle(.hiddenTitleBar)
@@ -48,12 +52,16 @@ struct CrumpleApp: App {
 
         Settings {
             SettingsView()
+                .tint(Theme.accent)
+                .id(model.appearance)
                 .environment(model)
                 .preferredColorScheme(model.appearance.colorScheme)
         }
 
         MenuBarExtra(isInserted: Binding(get: { model.showsMenuBarExtra }, set: { model.showsMenuBarExtra = $0 })) {
             MenuBarPanel()
+                .tint(Theme.accent)
+                .id(model.appearance)
                 .environment(model)
         } label: {
             Image(nsImage: MenuBarIcon.image)
