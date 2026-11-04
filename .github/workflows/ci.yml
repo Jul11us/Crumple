@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS · tests, build, localization
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version && xcode-select -p
+      - name: Tests
+        run: swift test
+      - name: Universal build (ad hoc signed)
+        run: bash scripts/build.sh
+      - name: Localization resources
+        run: bash Localization/verify.sh
+
+  windows:
+    name: Windows · core tests, publish, demo run
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      # Runs scripts/windows-strings.py, the core tests, and publishes the exe (and Setup exe when NSIS is present).
+      - name: Core tests and publish
+        shell: pwsh
+        run: ./scripts/build-windows.ps1
+      # Opens the real exe offscreen in demo mode: scans, a smart clean, a throw into the basket, screenshots.
+      - name: Demo run of the real exe
+        shell: pwsh
+        run: ./scripts/test-windows.ps1
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-previews
+          path: |
+            build/releases/windows/Crumple-previews
+            build/releases/windows/Crumple-render.log
+          if-no-files-found: ignore
