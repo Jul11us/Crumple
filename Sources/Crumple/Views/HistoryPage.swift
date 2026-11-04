@@ -109,7 +109,9 @@ private struct HistoryContent: View {
                     }
                 }
             }
-            .padding(.horizontal, 40)
+            .padding(.leading, 40)
+            // The right-hand column stays clear for the basket, which sits in the corner of every page.
+            .padding(.trailing, BasketGeometry.reservedTrailing)
             .padding(.top, 48)
             .padding(.bottom, 32)
         }

@@ -18,7 +18,7 @@ struct SettingsView: View {
             } header: {
                 Text("清理")
             } footer: {
-                Text("“移到废纸篓”可以恢复，清倒废纸篓后才真正释放空间；“直接删除”会立刻释放空间，无法恢复。卸载应用总是先移到废纸篓。")
+                Text("“扔进纸篓”就是移到废纸篓，可以撤销，清倒后才真正释放空间；“送进碎纸机”会永久删除、立刻释放空间，无法撤销。拖动时按住 ⌥ 也能临时用碎纸机。卸载应用总是扔进纸篓。")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -48,6 +48,7 @@ struct SettingsView: View {
                     ForEach(AppAppearance.allCases) { Text($0.title).tag($0) }
                 }
                 Toggle("启动时播放开场动画", isOn: $model.playsLaunchAnimation)
+                Toggle("声音和触感", isOn: $model.playsSounds)
             }
 
             Section {

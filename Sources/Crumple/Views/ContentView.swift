@@ -1,4 +1,5 @@
 import SwiftUI
+import QuickLook
 
 struct ContentView: View {
     @Environment(AppModel.self) private var model
@@ -29,6 +30,21 @@ struct ContentView: View {
                 .accessibilityHidden(true)
                 .opacity(model.showsBasket ? 1 : 0)
                 .animation(.easeInOut(duration: 0.35), value: model.showsBasket)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            // The basket is the Trash: click it to empty it.
+            if model.showsBasket && model.trashSize != 0 && !model.isCleaning {
+                Color.clear
+                    .frame(width: BasketGeometry.size.width, height: BasketGeometry.size.height)
+                    .contentShape(Rectangle())
+                    .onTapGesture { model.requestEmptyTrash() }
+                    .help(model.trashSize.map { String(localized: "清倒废纸篓 · \($0.byteString)") } ?? String(localized: "清倒废纸篓"))
+                    .padding(.trailing, BasketGeometry.trailingInset)
+                    .padding(.bottom, BasketGeometry.bottomInset)
+                    .accessibilityElement()
+                    .accessibilityLabel(String(localized: "清倒废纸篓"))
+                    .accessibilityAddTraits(.isButton)
+            }
         }
         .overlay(alignment: .bottomTrailing) {
             if let note = model.basketNote {
@@ -62,6 +78,7 @@ struct ContentView: View {
         }
         .onAppear {
             model.openMainWindow = { openWindow(id: "main") }
+            model.installKeyMonitor()
             model.startSplashIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -70,6 +87,7 @@ struct ContentView: View {
         .sheet(isPresented: Binding(get: { model.showsOnboarding }, set: { model.showsOnboarding = $0 })) {
             OnboardingView()
         }
+        .quickLookPreview(Binding(get: { model.previewURL }, set: { model.previewURL = $0 }))
         .frame(minWidth: 1100, minHeight: 720)
         .preferredColorScheme(model.appearance.colorScheme)
         .alert(
@@ -78,7 +96,7 @@ struct ContentView: View {
             presenting: model.confirmation
         ) { confirmation in
             Button(confirmation.actionTitle, role: .destructive) { confirmation.action() }
-            Button("取消", role: .cancel) {}
+            Button("取消", role: .cancel) { confirmation.cancel?() }
         } message: { confirmation in
             Text(confirmation.message)
         }

@@ -88,8 +88,10 @@ struct ItemRow: View {
                           : Theme.fill.opacity(hovering && item.status != .tossed ? 0.06 : 0))
             )
             .contentShape(Rectangle())
+            .onHover { inside in if inside { model.pointedURL = item.appURL ?? item.url } }
             .gesture(tossGesture)
             .onTapGesture {
+                model.pointedURL = item.appURL ?? item.url
                 if style == .app {
                     withAnimation(Theme.pageTransition) { model.focusedAppID = item.id }
                 } else {
@@ -101,6 +103,8 @@ struct ItemRow: View {
             }
             .accessibilityAction(named: "扔进纸篓") { model.throwAway(item, in: category) }
             .contextMenu {
+                Button("快速查看") { model.previewURL = item.appURL ?? item.url }
+                    .keyboardShortcut(.space, modifiers: [])
                 Button("扔进纸篓") { model.throwAway(item, in: category) }
                     .disabled(model.isCleaning)
                 Button("在访达中显示") { NSWorkspace.shared.activateFileViewerSelecting([item.url]) }
@@ -157,6 +161,7 @@ struct ListScanning: View {
     let page: Page
     let title: String
     let detail: String
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         VStack(spacing: 0) {
@@ -174,7 +179,11 @@ struct ListScanning: View {
                 .monospacedDigit()
                 .contentTransition(.numericText())
                 .padding(.top, 6)
-            Spacer()
+            Spacer(minLength: 24)
+            Button("停止扫描") { model.cancelScan(on: page) }
+                .buttonStyle(SecondaryButtonStyle())
+                .keyboardShortcut(.cancelAction)
+            Spacer().frame(height: 40)
         }
         .frame(maxWidth: .infinity)
     }

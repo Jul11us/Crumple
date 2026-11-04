@@ -25,23 +25,11 @@ struct OverviewPage: View {
                 }
                 .fixedSize(horizontal: false, vertical: true)
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("更多工具")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Theme.secondary)
-                    VStack(spacing: 0) {
-                        toolRow(.status, .analysis)
-                        Rectangle().fill(Theme.stroke).frame(height: 1).padding(.horizontal, 16)
-                        toolRow(.optimize, .largeFiles)
-                        Rectangle().fill(Theme.stroke).frame(height: 1).padding(.horizontal, 16)
-                        toolRow(.duplicates, .uninstaller)
-                    }
-                    .surfaceCard(padding: 0)
-                }
-
                 if !model.history.isEmpty { RecentCard() }
             }
-            .padding(.horizontal, 32)
+            .padding(.leading, 32)
+            // The right-hand column stays clear for the basket, which sits in the corner of every page.
+            .padding(.trailing, BasketGeometry.reservedTrailing)
             .padding(.top, 48)
             .padding(.bottom, 32)
             .frame(maxWidth: 1440)
@@ -51,14 +39,6 @@ struct OverviewPage: View {
         .foregroundStyle(Theme.primary)
     }
 
-    private func toolRow(_ first: Page, _ second: Page) -> some View {
-        HStack(spacing: 0) {
-            ModuleTile(page: first)
-            Rectangle().fill(Theme.stroke).frame(width: 1).padding(.vertical, 16)
-            ModuleTile(page: second)
-        }
-        .fixedSize(horizontal: false, vertical: true)
-    }
 }
 
 private struct PermissionBanner: View {
@@ -94,23 +74,20 @@ private struct StorageCard: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 20) {
             if let disk = model.disk {
-                HStack {
-                    Text(disk.name).font(.system(size: 14, weight: .medium))
-                    Spacer()
-                    Text("共 \(disk.total.byteString)")
-                        .font(.system(size: 12).monospacedDigit()).foregroundStyle(Theme.tertiary)
+                Text(disk.name).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(disk.available.byteString).font(Theme.title(40))
+                    Text("可用 · 共 \(disk.total.byteString)")
+                        .font(.system(size: 13)).foregroundStyle(Theme.secondary)
                 }
-                HStack(spacing: 24) {
-                    storageRing(disk)
-                    VStack(alignment: .leading, spacing: 16) {
-                        LegendRow(color: Theme.chart, title: String(localized: "已使用"), value: disk.used.byteString)
-                        LegendRow(color: Theme.accent, title: String(localized: "可以清理的垃圾"),
-                                  value: model.lastSmartScan == nil ? String(localized: "尚未扫描") : model.junkFound.byteString)
-                        LegendRow(color: Theme.raised, title: String(localized: "可用空间"), value: disk.available.byteString)
-                    }
-                    .frame(maxWidth: .infinity)
+                DiskRuler(disk: disk, junk: model.lastSmartScan == nil ? 0 : model.junkFound)
+                VStack(spacing: 10) {
+                    LeaderRow(title: String(localized: "已使用"), value: disk.used.byteString)
+                    LeaderRow(title: String(localized: "可以清理的垃圾"),
+                              value: model.lastSmartScan == nil ? String(localized: "尚未扫描") : model.junkFound.byteString)
+                    LeaderRow(title: String(localized: "可用空间"), value: disk.available.byteString)
                 }
             } else {
                 Text("读不到磁盘信息").foregroundStyle(Theme.secondary)
@@ -119,44 +96,72 @@ private struct StorageCard: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .surfaceCard(padding: 24)
     }
+}
 
-    private func storageRing(_ disk: DiskInfo) -> some View {
-        let junkFraction = model.lastSmartScan == nil ? 0 : min(disk.usedFraction, Double(model.junkFound) / Double(max(disk.total, 1)))
-        return ZStack {
-            Circle().stroke(Theme.raised, lineWidth: 10)
-            Circle()
-                .trim(from: 0, to: disk.usedFraction)
-                .stroke(Theme.chart, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-            if junkFraction > 0.002 {
-                Circle()
-                    .trim(from: disk.usedFraction - junkFraction, to: disk.usedFraction)
-                    .stroke(Theme.accent, style: StrokeStyle(lineWidth: 10))
-                    .rotationEffect(.degrees(-90))
+/// The disk as a ruler: used space in ink, the junk found hatched at its end, tick marks every tenth.
+private struct DiskRuler: View {
+    let disk: DiskInfo
+    let junk: Int64
+
+    var body: some View {
+        Canvas { context, size in
+            let barHeight: CGFloat = 10
+            let bar = CGRect(x: 0, y: 0, width: size.width, height: barHeight)
+            context.fill(Path(bar), with: .color(Theme.raised))
+            let used = size.width * disk.usedFraction
+            context.fill(Path(CGRect(x: 0, y: 0, width: used, height: barHeight)), with: .color(Theme.primary))
+            let junkWidth = min(used, size.width * Double(junk) / Double(max(disk.total, 1)))
+            if junkWidth > 1 {
+                let rect = CGRect(x: used - junkWidth, y: 0, width: junkWidth, height: barHeight)
+                context.fill(Path(rect), with: .color(Theme.base))
+                var hatch = Path()
+                for x in stride(from: rect.minX - barHeight, through: rect.maxX, by: 4) {
+                    hatch.move(to: CGPoint(x: x, y: barHeight))
+                    hatch.addLine(to: CGPoint(x: x + barHeight, y: 0))
+                }
+                var clipped = context
+                clipped.clip(to: Path(rect))
+                clipped.stroke(hatch, with: .color(Theme.primary), lineWidth: 1)
             }
-            VStack(spacing: 4) {
-                Text(disk.available.byteString).font(Theme.title(22)).monospacedDigit()
-                Text("可用").font(.system(size: 12)).foregroundStyle(Theme.secondary)
+            var ticks = Path()
+            for i in 0...10 {
+                let x = min(size.width - 0.5, max(0.5, size.width * CGFloat(i) / 10))
+                ticks.move(to: CGPoint(x: x, y: barHeight + 3))
+                ticks.addLine(to: CGPoint(x: x, y: barHeight + (i % 5 == 0 ? 9 : 6)))
             }
+            context.stroke(ticks, with: .color(Theme.tertiary), lineWidth: 1)
         }
-        .frame(width: 132, height: 132)
-        .padding(6)
-        .accessibilityElement(children: .combine)
+        .frame(height: 20)
+        .accessibilityElement()
+        .accessibilityLabel("已使用 \(Int(disk.usedFraction * 100))%")
     }
 }
 
-private struct LegendRow: View {
-    let color: Color
+/// "Title ........ value", like a line on a receipt.
+struct LeaderRow: View {
     let title: String
     let value: String
 
     var body: some View {
-        HStack(spacing: 8) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            Text(title).font(.system(size: 12)).foregroundStyle(Theme.secondary).lineLimit(1)
-            Spacer(minLength: 8)
-            Text(value).font(.system(size: 12, weight: .medium).monospacedDigit()).lineLimit(1).fixedSize()
+        HStack(alignment: .lastTextBaseline, spacing: 6) {
+            Text(title).font(.system(size: 13)).foregroundStyle(Theme.secondary).lineLimit(1)
+            DottedLeader()
+            Text(value).font(Theme.figures(13)).lineLimit(1).fixedSize()
         }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct DottedLeader: View {
+    var body: some View {
+        Canvas { context, size in
+            var line = Path()
+            line.move(to: CGPoint(x: 0, y: size.height - 1))
+            line.addLine(to: CGPoint(x: size.width, y: size.height - 1))
+            context.stroke(line, with: .color(Theme.tertiary.opacity(0.7)), style: StrokeStyle(lineWidth: 1, dash: [1, 3]))
+        }
+        .frame(height: 4)
+        .accessibilityHidden(true)
     }
 }
 
@@ -168,7 +173,7 @@ private struct JunkCard: View {
             Text("智能清理").font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.secondary)
             if let last = model.lastSmartScan {
                 Text(model.junkFound.byteString)
-                    .font(Theme.title(32)).monospacedDigit()
+                    .font(Theme.title(32))
                 Text("可以清理 · \(last.agoText)扫描")
                     .font(.system(size: 12)).foregroundStyle(Theme.secondary)
                 Spacer(minLength: 12)
@@ -182,14 +187,7 @@ private struct JunkCard: View {
                     .font(.system(size: 12)).foregroundStyle(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 12)
-                Button {
-                    model.startSmartScan()
-                } label: {
-                    HStack(spacing: 16) {
-                        Text("开始扫描")
-                        Image(systemName: "arrow.right")
-                    }
-                }
+                Button("开始扫描") { model.startSmartScan() }
                 .buttonStyle(PrimaryButtonStyle(accent: Theme.accent))
             }
         }
@@ -197,62 +195,6 @@ private struct JunkCard: View {
         .padding(24)
         .background(RoundedRectangle(cornerRadius: 16).fill(Theme.accentSurface))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.stroke))
-    }
-}
-
-private struct ModuleTile: View {
-    let page: Page
-    @Environment(AppModel.self) private var model
-
-    private var status: String {
-        switch page {
-        case .largeFiles:
-            model.filesPhase == .results
-                ? String(localized: "找到 \(model.largeFiles.liveItems.count) 个，共 \(model.largeFiles.totalBytes.byteString)")
-                : String(localized: "找出个人文件夹里最占地方的文件")
-        case .duplicates:
-            model.dupPhase == .results
-                ? String(localized: "\(model.duplicateGroups) 组重复，多占了 \(model.duplicates.totalBytes.byteString)")
-                : String(localized: "找出内容一模一样的照片、视频和文档")
-        case .uninstaller:
-            model.appsPhase == .results
-                ? String(localized: "\(model.apps.liveItems.count) 个应用，共 \(model.apps.totalBytes.byteString)")
-                : String(localized: "连同残留文件一起删掉不用的应用")
-        case .status: String(localized: "实时查看 CPU、内存、电池、网络和最占资源的应用")
-        case .analysis: String(localized: "看看每个文件夹各占了多少空间")
-        case .optimize: String(localized: "关掉占资源的应用和后台启动项，做常用维护")
-        case .overview, .smartClean, .history: ""
-        }
-    }
-
-    var body: some View {
-        Hoverable { hovering in
-            Button {
-                withAnimation(Theme.pageTransition) { model.page = page }
-            } label: {
-                HStack(alignment: .center, spacing: 12) {
-                    Image(systemName: page.symbol)
-                        .font(.system(size: 18))
-                        .foregroundStyle(Theme.secondary)
-                        .frame(width: 24)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(page.title).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.primary)
-                        Text(status)
-                            .font(.system(size: 12)).foregroundStyle(Theme.secondary)
-                            .lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 4)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10)).foregroundStyle(Theme.tertiary)
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 8).fill(hovering ? Theme.fill.opacity(0.035) : .clear))
-                .contentShape(Rectangle())
-                .animation(Theme.feedback, value: hovering)
-            }
-            .buttonStyle(.plain)
-        }
     }
 }
 

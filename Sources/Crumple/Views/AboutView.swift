@@ -94,5 +94,51 @@ struct AppMenuCommands: Commands {
             }
             .disabled(UpdateCheck.repository == nil)
         }
+
+        // Undo puts the latest clean back from the Trash. Crumple has no text fields, so nothing else needs ⌘Z.
+        CommandGroup(replacing: .undoRedo) { UndoItem(model: model) }
+        // In place of the text editing items (there is no text to edit), so ⌘A selects files.
+        CommandGroup(replacing: .pasteboard) { SelectionItems(model: model) }
+        CommandMenu("前往") { GoItems(model: model) }
+    }
+}
+
+// The items stay enabled: SwiftUI doesn't reliably refresh a menu item's enabled state, so each action
+// checks for itself and says (or beeps) when there's nothing to do.
+private struct UndoItem: View {
+    let model: AppModel
+
+    var body: some View {
+        Button("撤销上次清理") { model.undoLastClean() }
+            .keyboardShortcut("z", modifiers: .command)
+    }
+}
+
+private struct SelectionItems: View {
+    let model: AppModel
+
+    var body: some View {
+        Button("全选") { model.selectAllInList() }
+            .keyboardShortcut("a", modifiers: .command)
+        Button("把所选扔进纸篓") { model.throwSelection(shred: false) }
+            .keyboardShortcut(.delete, modifiers: .command)
+        Button("把所选送进碎纸机") { model.throwSelection(shred: true) }
+            .keyboardShortcut(.delete, modifiers: [.command, .option])
+    }
+}
+
+private struct GoItems: View {
+    let model: AppModel
+
+    var body: some View {
+        ForEach(Array(Page.allCases.enumerated()), id: \.element) { index, page in
+            Button(page.title) { model.go(to: page) }
+                .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+        }
+        Divider()
+        Button("重新扫描") { model.rescan() }
+            .keyboardShortcut("r", modifiers: .command)
+        Button("停止扫描") { model.cancelCurrentScan() }
+            .keyboardShortcut(".", modifiers: .command)
     }
 }
