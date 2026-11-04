@@ -44,11 +44,38 @@ public sealed class PathPolicy
                 if (components.Any(x => x.EndsWith('.') || x.EndsWith(' '))) return false; // Win32 path aliases
             }
             if (path.StartsWith(@"\\", StringComparison.Ordinal) || path.StartsWith(@"\\?", StringComparison.Ordinal)) return false;
-            return Roots.Any(x => IsBelow(path, x)) && !IsIgnored(path)
+            return Roots.Any(x => IsBelow(path, x)) && !IsIgnored(path) && !IsSensitive(path)
                 && !ProtectedRoots.Any(x => Comparer.Equals(path, x) || IsBelow(path, x));
         }
         catch (ArgumentException) { return false; }
         catch (NotSupportedException) { return false; }
+    }
+
+    /// Folders that hold keys and credentials. Nothing re-creates them once they are gone, so they are
+    /// refused wherever they appear, even below a root the user chose. The macOS edition refuses the
+    /// same kinds of places; both are checked against Tests/Shared/never-touch.json.
+    public static IReadOnlyList<string> SensitiveFolderNames { get; } = [".ssh", ".gnupg", ".aws", ".azure", ".kube"];
+    /// Runs of folder names refused wherever they appear (for example AppData\Roaming\Microsoft\Credentials).
+    public static IReadOnlyList<string[]> SensitiveFolderRuns { get; } =
+        [["Microsoft", "Credentials"], ["Microsoft", "Protect"], ["Microsoft", "Vault"], ["Microsoft", "Crypto"], ["Microsoft", "SystemCertificates"]];
+
+    /// Compared without case on every system, since Windows ignores it.
+    public static bool IsSensitive(string path)
+    {
+        var parts = Normalize(path).Split(new[] { System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar },
+            StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < parts.Length; i++)
+        {
+            if (SensitiveFolderNames.Contains(parts[i], StringComparer.OrdinalIgnoreCase)) return true;
+            foreach (var run in SensitiveFolderRuns)
+            {
+                if (i + run.Length > parts.Length) continue;
+                var matches = true;
+                for (var j = 0; j < run.Length && matches; j++) matches = string.Equals(run[j], parts[i + j], StringComparison.OrdinalIgnoreCase);
+                if (matches) return true;
+            }
+        }
+        return false;
     }
 
     public bool CanReadFile(string path)
@@ -109,7 +136,7 @@ public sealed class PathPolicy
                 if ((attrs & FileAttributes.Directory) != 0)
                 {
                     var name = System.IO.Path.GetFileName(path);
-                    if (name is not (".git" or ".svn" or ".hg" or "$RECYCLE.BIN") && !IsIgnored(path)) pending.Push(path);
+                    if (name is not (".git" or ".svn" or ".hg" or "$RECYCLE.BIN") && !IsIgnored(path) && !IsSensitive(path)) pending.Push(path);
                 }
                 else if (InScope(path)) yield return path;
             }

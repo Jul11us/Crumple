@@ -192,6 +192,30 @@ try
         try { store.Read("history", () => new List<CleanupReceipt>()); throw new InvalidOperationException("Corruption must surface"); }
         catch (System.Text.Json.JsonException) { Expect(File.ReadAllText(Path.Combine(dir, "history.json")) == "damaged"); }
     });
+    Test("Shared never-touch cases (Tests/Shared/never-touch.json)", () =>
+    {
+        var home = Folder("shared-home"); var policy = new PathPolicy([home], []);
+        using var file = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "never-touch.json")));
+        var checkedCases = 0;
+        foreach (var entry in file.RootElement.GetProperty("cases").EnumerateArray())
+        {
+            if (entry.TryGetProperty("platform", out var platform) && platform.GetString() != "windows") continue;
+            var relative = entry.GetProperty("path").GetString()!;
+            Expect(relative.StartsWith("~/", StringComparison.Ordinal), relative);
+            var path = Path.Combine(home, relative[2..].Replace('/', Path.DirectorySeparatorChar));
+            var allowed = entry.GetProperty("expect").GetString() == "allow";
+            Expect(policy.InScope(path) == allowed, (allowed ? "should allow " : "should refuse ") + relative);
+            checkedCases++;
+        }
+        Expect(checkedCases > 10, "Shared cases missing");
+    });
+    Test("Sensitive folders are not walked into", () =>
+    {
+        var dir = Folder("sensitive-walk"); Make(dir, "keep.bin"); Make(Path.Combine(dir, ".ssh"), "id_ed25519");
+        Make(Path.Combine(dir, "Microsoft", "Credentials"), "blob");
+        var found = new PathPolicy([dir], []).WalkFiles(dir, CancellationToken.None).Select(x => Path.GetFileName(x)).ToArray();
+        Expect(found.Length == 1 && found[0] == "keep.bin", string.Join(", ", found));
+    });
     Console.WriteLine($"\n{passed} passed, {failed} failed");
 }
 finally { Directory.Delete(root, true); }

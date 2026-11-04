@@ -96,15 +96,16 @@ enum Cleaner {
         (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil
     }
 
-    /// Something at least two levels inside the home folder (so never ~ or ~/Library itself),
-    /// or an app sitting directly in one of the Applications folders.
+    /// Something at least two levels inside the home folder (so never ~ or ~/Library itself) and
+    /// outside the `NeverTouch` places, or an app sitting directly in one of the Applications folders.
     static func isSafeTarget(_ url: URL) -> Bool {
         let parts = components(url)
         if url.pathExtension == "app", Paths.applicationFolders.contains(where: { components($0) == Array(parts.dropLast()) }) {
             return true
         }
         let home = components(Paths.home)
-        return parts.count >= home.count + 2 && Array(parts.prefix(home.count)) == home
+        guard parts.count >= home.count + 2, Array(parts.prefix(home.count)) == home else { return false }
+        return !NeverTouch.contains(Array(parts.dropFirst(home.count)))
     }
 
     static func components(_ url: URL) -> [String] { Paths.components(url) }
@@ -157,6 +158,30 @@ enum Cleaner {
         } catch {
             return false
         }
+    }
+}
+
+/// Places that hold keys, passwords or an app's own database. Nothing re-creates them once they
+/// are gone, so they are refused even deep inside home, whichever page asks (Space Lens shows
+/// hidden folders, for one). The Windows edition refuses the same kinds of places; both are
+/// checked against Tests/Shared/never-touch.json.
+enum NeverTouch {
+    /// Folders refused wherever they appear, with everything inside them.
+    static let folderNames: Set<String> = [".ssh", ".gnupg", ".aws", ".azure", ".kube"]
+    /// Bundles and keychain files refused wherever they appear.
+    static let extensions: Set<String> = ["photoslibrary", "keychain", "keychain-db"]
+    /// Folders below home refused with everything inside them.
+    static let homeFolders: [[String]] = [
+        "Library/Keychains", "Library/Mail", "Library/Messages", "Library/Accounts",
+        "Library/Application Support/Crumple",
+    ].map { $0.lowercased().split(separator: "/").map(String.init) }
+
+    /// `relative` is a path's components below home. Compared without case, because the Mac's
+    /// disk usually ignores it: ~/library/keychains is the same folder as ~/Library/Keychains.
+    static func contains(_ relative: [String]) -> Bool {
+        let parts = relative.map { $0.lowercased() }
+        return parts.contains { folderNames.contains($0) || extensions.contains(($0 as NSString).pathExtension) }
+            || homeFolders.contains { parts.starts(with: $0) }
     }
 }
 
