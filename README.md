@@ -78,6 +78,7 @@ On macOS, a menu bar panel keeps system readings close at hand. On Windows, the 
 - Installers and old downloads start unselected. Windows developer caches do, too.
 - Caches belonging to running apps are protected from cleanup.
 - Cleanup boundaries and ignored folders are checked before files move.
+- Some places are never moved, whichever page asks: key folders such as `.ssh` on both systems; keychains, Mail, Messages and photo libraries on macOS; credential stores on Windows. Both editions are tested against the same cases in `Tests/Shared/never-touch.json`.
 - Demo mode uses generated files and an isolated bin.
 
 macOS also offers an explicit permanent-delete mode through its paper shredder. The Windows preview uses the Recycle Bin and does not provide permanent deletion. Platform behavior and verification details are documented in the [macOS development guide](docs/DEVELOPMENT.zh-CN.md) and [Windows guide](Windows/README.md).

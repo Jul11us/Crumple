@@ -78,6 +78,7 @@ macOS 菜单栏面板让系统状态随手可见。Windows 版延续相同的纸
 - 安装包与旧下载默认不勾选，Windows 的开发缓存也默认不勾选。
 - 正在运行的应用，其缓存受到清理保护。
 - 清理前重新检查路径边界与忽略列表。
+- 有些位置无论从哪个页面发起都不会被移动：两个系统上的 `.ssh` 等密钥文件夹；macOS 上的钥匙串、邮件、信息和照片图库；Windows 上的凭据存储。两个版本用 `Tests/Shared/never-touch.json` 中的同一批用例测试。
 - 演示模式使用生成的假文件和独立废纸篓。
 
 macOS 另提供需要明确选择的碎纸机模式，用于永久删除。Windows 预览版使用系统回收站，不提供永久删除。平台差异与验证范围见 [macOS 开发指南](docs/DEVELOPMENT.zh-CN.md)和 [Windows 说明](Windows/README.md)。

@@ -4,4 +4,6 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../Crumple.Core/Crumple.Core.csproj" /></ItemGroup>
+  <!-- Cases shared with the macOS tests, so both editions refuse the same places. -->
+  <ItemGroup><None Include="../../Tests/Shared/never-touch.json" Link="never-touch.json" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

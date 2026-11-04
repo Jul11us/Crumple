@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 
 namespace Crumple.Core;
@@ -63,6 +64,9 @@ public sealed class Scanner(PathPolicy policy, Func<string, string?>? identity =
         return new(items.OrderByDescending(x => x.Size).ToList(), checkedCount, skipped);
     }
 
+    /// How many files the duplicate scan hashes at once.
+    public const int HashWidth = 4;
+
     public ScanResult Duplicates(IEnumerable<string> folders, long minBytes, IProgress<ScanProgress>? progress, CancellationToken token)
     {
         var candidates = Large(folders, minBytes, progress, token);
@@ -76,48 +80,38 @@ public sealed class Scanner(PathPolicy policy, Func<string, string?>? identity =
             if (identity != null && id == null) { candidates = candidates with { Skipped = candidates.Skipped + 1 }; continue; }
             if (id == null || identities.Add(id)) unique.Add(file);
         }
-        var compared = 0;
-        foreach (var sameSize in unique.GroupBy(x => x.Size).Where(x => x.Count() > 1))
+        // A few files at a time keep a solid-state disk busy; more only make the reads queue.
+        var parallel = new ParallelOptions { CancellationToken = token, MaxDegreeOfParallelism = HashWidth };
+        // Cheap pass: a few samples from each file that shares its size with another.
+        var sampled = new ConcurrentBag<(CleanItem File, string Hash)>();
+        Parallel.ForEach(unique.GroupBy(x => x.Size).Where(x => x.Count() > 1).SelectMany(x => x), parallel, file =>
         {
-            var samples = new Dictionary<string, List<CleanItem>>();
-            foreach (var file in sameSize)
+            try { sampled.Add((file, SampleHash(file.Path, file.Size, token))); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        });
+        // Thorough pass: the whole file, only for files that still look alike.
+        var alike = sampled.GroupBy(x => (x.File.Size, x.Hash)).Where(x => x.Count() > 1).SelectMany(x => x.Select(y => y.File));
+        var hashed = new ConcurrentBag<(CleanItem File, string Hash)>();
+        var compared = 0;
+        Parallel.ForEach(alike, parallel, file =>
+        {
+            progress?.Report(new(Interlocked.Increment(ref compared), file.Path));
+            try
             {
-                token.ThrowIfCancellationRequested();
-                try
-                {
-                    var hash = SampleHash(file.Path, file.Size, token);
-                    if (!samples.TryGetValue(hash, out var list)) samples[hash] = list = [];
-                    list.Add(file);
-                }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                if (!policy.CanReadFile(file.Path) || !file.Stamp.Matches(file.Path)) return;
+                using var stream = OpenRead(file.Path);
+                var hash = FullHash(stream, token);
+                if (file.Stamp.Matches(file.Path)) hashed.Add((file, hash));
             }
-            foreach (var sample in samples.Values.Where(x => x.Count > 1))
-            {
-                var hashes = new Dictionary<string, List<CleanItem>>();
-                foreach (var file in sample)
-                {
-                    progress?.Report(new(++compared, file.Path));
-                    token.ThrowIfCancellationRequested();
-                    try
-                    {
-                        if (!policy.CanReadFile(file.Path) || !file.Stamp.Matches(file.Path)) continue;
-                        using var stream = OpenRead(file.Path);
-                        var hash = FullHash(stream, token);
-                        if (!file.Stamp.Matches(file.Path)) continue;
-                        if (!hashes.TryGetValue(hash, out var list)) hashes[hash] = list = [];
-                        list.Add(file);
-                    }
-                    catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-                }
-                foreach (var (hash, copies) in hashes.Where(x => x.Value.Count > 1))
-                {
-                    var ordered = copies.OrderBy(x => LooksCopied(x.Name)).ThenBy(x => x.Stamp.CreatedUtc)
-                        .ThenBy(x => x.Path.Length).ThenBy(x => x.Path, PathPolicy.Comparer).ToList();
-                    var keeper = ordered[0];
-                    items.AddRange(ordered.Skip(1).Select(x => new CleanItem { Path = x.Path, Category = FileCategory.Duplicate,
-                        Stamp = x.Stamp, Selected = true, Keeper = keeper.Path, KeeperStamp = keeper.Stamp, ContentHash = hash }));
-                }
-            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        });
+        foreach (var copies in hashed.GroupBy(x => (x.File.Size, x.Hash)).Where(x => x.Count() > 1))
+        {
+            var ordered = copies.Select(x => x.File).OrderBy(x => LooksCopied(x.Name)).ThenBy(x => x.Stamp.CreatedUtc)
+                .ThenBy(x => x.Path.Length).ThenBy(x => x.Path, PathPolicy.Comparer).ToList();
+            var keeper = ordered[0];
+            items.AddRange(ordered.Skip(1).Select(x => new CleanItem { Path = x.Path, Category = FileCategory.Duplicate,
+                Stamp = x.Stamp, Selected = true, Keeper = keeper.Path, KeeperStamp = keeper.Stamp, ContentHash = copies.Key.Hash }));
         }
         return new(items.OrderByDescending(x => x.Size).ThenBy(x => x.Keeper, PathPolicy.Comparer).ToList(), candidates.Checked, candidates.Skipped);
     }

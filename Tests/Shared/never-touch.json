@@ -1,0 +1,44 @@
+{
+  "about": "Paths both editions must refuse or allow, relative to the home folder. Read by Tests/CrumpleTests (macOS) and Windows/Crumple.Core.Tests. A case without a platform applies to both.",
+  "cases": [
+    { "path": "~/.ssh/id_ed25519", "expect": "refuse" },
+    { "path": "~/.ssh/config", "expect": "refuse" },
+    { "path": "~/.gnupg/pubring.kbx", "expect": "refuse" },
+    { "path": "~/.aws/credentials", "expect": "refuse" },
+    { "path": "~/.azure/msal_token_cache.json", "expect": "refuse" },
+    { "path": "~/.kube/config", "expect": "refuse" },
+    { "path": "~/Documents/old-laptop/.ssh/id_rsa", "expect": "refuse" },
+
+    { "path": "~/Library/Keychains/login.keychain-db", "expect": "refuse", "platform": "macos" },
+    { "path": "~/Library/Keychains/ABCD-1234/keychain-2.db", "expect": "refuse", "platform": "macos" },
+    { "path": "~/library/keychains/login.keychain-db", "expect": "refuse", "platform": "macos" },
+    { "path": "~/Documents/backup/login.keychain-db", "expect": "refuse", "platform": "macos" },
+    { "path": "~/Library/Mail/V10/MailData/Envelope Index", "expect": "refuse", "platform": "macos" },
+    { "path": "~/Library/Messages/chat.db", "expect": "refuse", "platform": "macos" },
+    { "path": "~/Library/Accounts/Accounts4.sqlite", "expect": "refuse", "platform": "macos" },
+    { "path": "~/Pictures/Photos Library.photoslibrary", "expect": "refuse", "platform": "macos" },
+    { "path": "~/Pictures/Photos Library.photoslibrary/database/Photos.sqlite", "expect": "refuse", "platform": "macos" },
+    { "path": "~/Library/Application Support/Crumple/history.json", "expect": "refuse", "platform": "macos" },
+
+    { "path": "~/AppData/Roaming/Microsoft/Credentials/DFBE70A7E5CC19A3", "expect": "refuse", "platform": "windows" },
+    { "path": "~/AppData/Local/Microsoft/Credentials/DFBE70A7E5CC19A3", "expect": "refuse", "platform": "windows" },
+    { "path": "~/AppData/Roaming/Microsoft/Protect/S-1-5-21/key", "expect": "refuse", "platform": "windows" },
+    { "path": "~/AppData/Local/Microsoft/Vault/4BF4C442/policy.vpol", "expect": "refuse", "platform": "windows" },
+    { "path": "~/AppData/Roaming/Microsoft/Crypto/RSA/key", "expect": "refuse", "platform": "windows" },
+    { "path": "~/AppData/Roaming/Microsoft/SystemCertificates/My/cert", "expect": "refuse", "platform": "windows" },
+    { "path": "~/appdata/roaming/microsoft/credentials/x", "expect": "refuse", "platform": "windows" },
+
+    { "path": "~/Downloads/Installer.dmg", "expect": "allow" },
+    { "path": "~/Documents/ssh-notes.txt", "expect": "allow" },
+    { "path": "~/Documents/.sshx/notes.txt", "expect": "allow" },
+    { "path": "~/Documents/Mail/draft.txt", "expect": "allow" },
+    { "path": "~/Library/Caches/com.example.app", "expect": "allow", "platform": "macos" },
+    { "path": "~/Library/Logs/Example", "expect": "allow", "platform": "macos" },
+    { "path": "~/Library/Mailbox Exports/a.mbox", "expect": "allow", "platform": "macos" },
+    { "path": "~/Library/Application Support/MobileSync/Backup/old", "expect": "allow", "platform": "macos" },
+    { "path": "~/.npm/_cacache", "expect": "allow", "platform": "macos" },
+    { "path": "~/AppData/Local/Temp/setup.tmp", "expect": "allow", "platform": "windows" },
+    { "path": "~/AppData/Local/Microsoft/Windows/WER/ReportArchive/x.wer", "expect": "allow", "platform": "windows" },
+    { "path": "~/AppData/Local/Microsoft/Edge/User Data/Default/Cache/f_000001", "expect": "allow", "platform": "windows" }
+  ]
+}

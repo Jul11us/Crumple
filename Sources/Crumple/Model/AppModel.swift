@@ -521,14 +521,14 @@ final class AppModel {
         }
         let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
         let days = oldDownloadDays
-        let ignored = ignoredPaths
+        let ignored = IgnoreList.Matcher(ignoredPaths)
         for category in junk {
             category.isScanning = true
             category.items = []
             let kind = category.kind
             Task.detached(priority: .userInitiated) {
                 let items = Scanner.scan(kind, runningBundleIDs: running, oldDownloadDays: days)
-                    .filter { !IgnoreList.contains($0.url, in: ignored) }
+                    .filter { !ignored.contains($0.url) }
                 await MainActor.run {
                     category.items = items
                     category.isScanning = false
@@ -674,7 +674,7 @@ final class AppModel {
         let task = Task {
             let started = Date()
             let work = Task.detached(priority: .userInitiated) {
-                DuplicateFinder.scan(minBytes: minBytes, ignored: ignored) { text in
+                await DuplicateFinder.scan(minBytes: minBytes, ignored: ignored) { text in
                     Task { @MainActor in self.dupProgress = text }
                 }
             }

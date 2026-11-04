@@ -37,9 +37,7 @@ enum Scanner {
         case .devCaches:
             items = scanDevCaches(home)
         case .installers:
-            let urls = children(of: home.appendingPathComponent("Downloads"))
-                .filter { installerExtensions.contains($0.pathExtension.lowercased()) }
-            items = makeItems(urls, selected: false) { $0.lastPathComponent }
+            items = scanInstallers(home)
         case .oldDownloads:
             items = scanOldDownloads(home, days: oldDownloadDays)
         case .largeFiles, .duplicates, .applications:
@@ -57,6 +55,7 @@ enum Scanner {
     static func scanLargeFiles(minBytes: Int64, progress: @escaping @Sendable (Int) -> Void) -> [CleanItem] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .isPackageKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey,
                                       .contentModificationDateKey, .contentAccessDateKey]
+        let keySet = Set(keys)
         var items: [CleanItem] = []
         var checked = 0
         for folder in largeFileFolders {
@@ -71,7 +70,7 @@ enum Scanner {
                     if Task.isCancelled { return [] }
                     progress(checked)
                 }
-                guard let values = try? url.resourceValues(forKeys: Set(keys)) else { continue }
+                guard let values = try? url.resourceValues(forKeys: keySet) else { continue }
                 if values.isPackage == true { continue }
                 guard values.isRegularFile == true else { continue }
                 let size = Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)
@@ -181,7 +180,8 @@ enum Scanner {
     // MARK: - Categories
 
     /// `running` is nil for folders where a running app doesn't matter (logs).
-    private static func scanAppFolders(in dir: URL, running: Set<String>?) -> [CleanItem] {
+    /// The category scans below take their folder as a parameter so tests can point them at a sandbox.
+    static func scanAppFolders(in dir: URL, running: Set<String>?) -> [CleanItem] {
         let urls = children(of: dir).filter { !$0.lastPathComponent.hasPrefix(ownBundleID) }
         let sizes = measure(urls)
         return zip(urls, sizes).map { url, size in
@@ -224,7 +224,7 @@ enum Scanner {
         return result
     }
 
-    private static func scanDevCaches(_ home: URL) -> [CleanItem] {
+    static func scanDevCaches(_ home: URL) -> [CleanItem] {
         var entries: [(url: URL, name: String, selected: Bool)] = devCacheSpecs.compactMap { spec in
             let url = home.appendingPathComponent(spec.path)
             return FileManager.default.fileExists(atPath: url.path) ? (url, spec.name, spec.selected) : nil
@@ -239,7 +239,14 @@ enum Scanner {
         }
     }
 
-    private static func scanOldDownloads(_ home: URL, days minimumDays: Int) -> [CleanItem] {
+    /// Installers start unticked: a dmg in Downloads is often the only copy of an app's installer.
+    static func scanInstallers(_ home: URL) -> [CleanItem] {
+        let urls = children(of: home.appendingPathComponent("Downloads"))
+            .filter { installerExtensions.contains($0.pathExtension.lowercased()) }
+        return makeItems(urls, selected: false) { $0.lastPathComponent }
+    }
+
+    static func scanOldDownloads(_ home: URL, days minimumDays: Int) -> [CleanItem] {
         let keys: Set<URLResourceKey> = [.contentModificationDateKey, .contentAccessDateKey]
         let now = Date()
         var idleDays: [URL: Int] = [:]

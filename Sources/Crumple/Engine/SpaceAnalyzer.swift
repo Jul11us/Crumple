@@ -32,6 +32,8 @@ final class SpaceAnalyzer {
 
     @ObservationIgnored private var cache: [URL: Int64] = [:]
     @ObservationIgnored private var token = 0
+    /// The measurements for the folder on screen; cancelled when another folder opens.
+    @ObservationIgnored private var measuring: Task<Void, Never>?
 
     var current: URL { trail.last ?? base.url }
     var total: Int64 { entries.compactMap(\.size).reduce(0, +) }
@@ -68,6 +70,7 @@ final class SpaceAnalyzer {
     private func load() {
         token += 1
         let token = token
+        measuring?.cancel()
         let urls = (try? FileManager.default.contentsOfDirectory(at: current, includingPropertiesForKeys: [.isDirectoryKey, .isPackageKey])) ?? []
         entries = urls.map { url in
             let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
@@ -82,7 +85,7 @@ final class SpaceAnalyzer {
         pending = todo.count
         guard !todo.isEmpty else { return }
 
-        Task {
+        measuring = Task {
             await withTaskGroup(of: (URL, Int64).self) { group in
                 var queue = todo.makeIterator()
                 for _ in 0..<min(6, todo.count) {
@@ -132,7 +135,11 @@ final class SpaceAnalyzer {
             at: url, includingPropertiesForKeys: Array(keys), options: [], errorHandler: { _, _ in true }
         ) else { return 0 }
         var total: Int64 = 0
+        var checked = 0
         for case let file as URL in enumerator {
+            // The answer is thrown away once another folder opens, so stop walking.
+            checked += 1
+            if checked % 1_000 == 0, Task.isCancelled { return total }
             if isProtected(file) {
                 enumerator.skipDescendants()
                 continue
