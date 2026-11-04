@@ -57,7 +57,7 @@ struct ScanDefaultsTests {
         try file("com.example.editor/today.log", in: logs)
         let items = Scanner.scanAppFolders(in: logs, running: nil)
         #expect(items.count == 1)
-        #expect(items.allSatisfy(\.isSelected))
+        #expect(items.allSatisfy { $0.isSelected })
     }
 
     @Test("安装包一律不勾选")
