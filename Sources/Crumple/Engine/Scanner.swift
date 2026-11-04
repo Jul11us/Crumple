@@ -55,6 +55,7 @@ enum Scanner {
     static func scanLargeFiles(minBytes: Int64, progress: @escaping @Sendable (Int) -> Void) -> [CleanItem] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .isPackageKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey,
                                       .contentModificationDateKey, .contentAccessDateKey]
+        let keySet = Set(keys)
         var items: [CleanItem] = []
         var checked = 0
         for folder in largeFileFolders {
@@ -69,7 +70,7 @@ enum Scanner {
                     if Task.isCancelled { return [] }
                     progress(checked)
                 }
-                guard let values = try? url.resourceValues(forKeys: Set(keys)) else { continue }
+                guard let values = try? url.resourceValues(forKeys: keySet) else { continue }
                 if values.isPackage == true { continue }
                 guard values.isRegularFile == true else { continue }
                 let size = Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)

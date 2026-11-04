@@ -17,6 +17,8 @@ enum DuplicateFinder {
     static func scan(minBytes: Int64, ignored: [String], progress: @escaping @Sendable (String) -> Void) -> [CleanItem] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .isPackageKey, .fileSizeKey, .totalFileAllocatedSizeKey,
                                       .creationDateKey, .contentModificationDateKey, .fileResourceIdentifierKey]
+        let keySet = Set(keys)
+        let ignore = IgnoreList.Matcher(ignored)
         var bySize: [Int64: [Candidate]] = [:]
         var seenFiles = Set<NSObject>()
         var checked = 0
@@ -31,11 +33,11 @@ enum DuplicateFinder {
                 checked += 1
                 if checked % 500 == 0, Task.isCancelled { return [] }
                 if checked % 500 == 0 { progress(String(localized: "已检查 \(checked.formatted()) 个文件")) }
-                if IgnoreList.contains(url, in: ignored) {
+                if ignore.contains(url) {
                     enumerator.skipDescendants()
                     continue
                 }
-                guard let values = try? url.resourceValues(forKeys: Set(keys)),
+                guard let values = try? url.resourceValues(forKeys: keySet),
                       values.isPackage != true, values.isRegularFile == true,
                       let size = values.fileSize.map(Int64.init), size >= minBytes else { continue }
                 let allocated = Int64(values.totalFileAllocatedSize ?? 0)
@@ -158,10 +160,24 @@ enum DuplicateFinder {
 /// Paths the user never wants to see in scan results. Anything inside an ignored folder is ignored too.
 enum IgnoreList {
     static func contains(_ url: URL, in ignored: [String]) -> Bool {
-        let path = Paths.normalized(url)
-        return ignored.contains { entry in
-            let entry = Paths.normalized(URL(fileURLWithPath: entry))
-            return path == entry || path.hasPrefix(entry == "/" ? entry : entry + "/")
+        Matcher(ignored).contains(url)
+    }
+
+    /// Normalizes the ignored folders once, for scans that check every file they walk past.
+    struct Matcher: Sendable {
+        private let entries: [(path: String, prefix: String)]
+
+        init(_ ignored: [String]) {
+            entries = ignored.map { entry in
+                let path = Paths.normalized(URL(fileURLWithPath: entry))
+                return (path, path == "/" ? path : path + "/")
+            }
+        }
+
+        func contains(_ url: URL) -> Bool {
+            guard !entries.isEmpty else { return false }
+            let path = Paths.normalized(url)
+            return entries.contains { path == $0.path || path.hasPrefix($0.prefix) }
         }
     }
 }
