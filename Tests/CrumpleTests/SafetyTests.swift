@@ -236,6 +236,103 @@ struct ScannerTests {
     }
 }
 
+@Suite("停止扫描")
+struct CancelScanTests {
+    @Test("停止后扫描马上收手，不交出半截结果")
+    func cancelledScansReturnNothing() async {
+        let files = Task.detached {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return Scanner.scanLargeFiles(minBytes: 1) { _ in }
+        }
+        #expect(await files.value.isEmpty)
+        let copies = Task.detached {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return DuplicateFinder.scan(minBytes: 1, ignored: []) { _ in }
+        }
+        #expect(await copies.value.isEmpty)
+    }
+}
+
+@Suite("健康分")
+struct HealthScoreTests {
+    func healthy() -> [HealthScore.Factor] {
+        [HealthScore.memory(pressure: 1, swap: 0),
+         HealthScore.cpu(history: Array(repeating: 0.1, count: 20), load: 2, cores: 10),
+         HealthScore.disk(available: 300_000_000_000, total: 500_000_000_000),
+         HealthScore.thermal(.nominal),
+         HealthScore.battery(health: 100)]
+    }
+
+    @Test("一切正常时是满分")
+    func healthyIsFull() {
+        #expect(HealthScore.combine(healthy()) == 100)
+        #expect(HealthScore.label(100) == "很好")
+    }
+
+    @Test("内存用满本身不扣分，压力和交换才扣")
+    func memoryJudgedByPressure() {
+        #expect(HealthScore.memory(pressure: 1, swap: 0).score == 100)
+        #expect(HealthScore.memory(pressure: 2, swap: 0).score < 70)
+        #expect(HealthScore.memory(pressure: 1, swap: 4_000_000_000).score < 100)
+        #expect(HealthScore.memory(pressure: 4, swap: 0).score < HealthScore.memory(pressure: 2, swap: 0).score)
+    }
+
+    @Test("CPU 偶尔冲高一下不扣分，一直忙才扣")
+    func cpuLooksAtTheLastHalfMinute() {
+        let spike = Array(repeating: 0.1, count: 19) + [1.0]
+        #expect(HealthScore.cpu(history: spike, load: 2, cores: 10).score == 100)
+        #expect(HealthScore.cpu(history: Array(repeating: 0.95, count: 20), load: 12, cores: 10).score < 60)
+    }
+
+    @Test("磁盘越满分越低，而且是连续变化的")
+    func diskIsSmooth() {
+        let total: Int64 = 500_000_000_000
+        let scores = stride(from: 0.0, through: 0.3, by: 0.01).map {
+            HealthScore.disk(available: Int64(Double(total) * $0), total: total).score
+        }
+        #expect(scores == scores.sorted())
+        #expect(zip(scores, scores.dropFirst()).allSatisfy { $1 - $0 <= 12 })
+    }
+
+    @Test("一项严重问题不会被其他几项平均掉")
+    func weakestPartCapsTheTotal() {
+        var factors = healthy()
+        factors[2] = HealthScore.disk(available: 8_000_000_000, total: 500_000_000_000) // 1.6% free
+        #expect(HealthScore.combine(factors) <= 50)
+        #expect(HealthScore.label(Int(HealthScore.combine(factors))) == "需要关注")
+    }
+
+    @Test("没有电池时按其余几项算")
+    func noBattery() {
+        #expect(HealthScore.combine(Array(healthy().dropLast())) == 100)
+    }
+}
+
+@Suite("纸篓和声音")
+struct BasketTests {
+    @Test("纸篓里的纸团跟着废纸篓变多，空了就没有")
+    func pileFollowsTrash() {
+        #expect(AppModel.pileCount(forTrash: 0) == 0)
+        let sizes: [Int64] = [1_000, 1_000_000, 100_000_000, 5_000_000_000, 500_000_000_000]
+        let counts = sizes.map(AppModel.pileCount(forTrash:))
+        #expect(counts.allSatisfy { $0 >= 1 && $0 <= 30 })
+        #expect(counts == counts.sorted())
+        #expect(counts.last == 30)
+    }
+
+    @Test("每种声音都有声、不爆音、长度合适")
+    func soundsAreSane() {
+        for sound in SoundBoard.Sound.allCases {
+            let samples = SoundBoard.synthesize(sound)
+            let seconds = Double(samples.count) / 44_100
+            #expect(seconds > 0.2 && seconds < 1.2, "\(sound)")
+            #expect(samples.allSatisfy { $0.isFinite && abs($0) <= 0.81 }, "\(sound)")
+            let loudness = samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count)
+            #expect(loudness > 0.002, "\(sound)")
+        }
+    }
+}
+
 @Suite("亲手投纸团")
 struct TossTests {
     let size = CGSize(width: 900, height: 560)
@@ -251,6 +348,24 @@ struct TossTests {
         #expect(toss(867, -323).kind == .make)
         #expect(toss(768, -323).kind == .rim)
         #expect(toss(600, -323).kind == .miss)
+    }
+
+    @Test("按住 ⌥ 时落到碎纸机口才算粉碎，松开 ⌥ 同样的一投进纸篓")
+    func shredderOnlyCatchesWhenArmed() {
+        let shredder = ShredderGeometry(rect: ShredderGeometry.rect(above: basket))
+        let above = CGPoint(x: shredder.slot.midX, y: shredder.slot.midY - 120)
+        let armed = TossedPaper(itemID: "", born: 0, start: above, velocity: .zero, seed: 1, icon: nil,
+                                startCrumple: 0, basket: basket, canvas: size, shredder: shredder)
+        #expect(armed.kind == .shred)
+        #expect(toss(0, 0, from: above).kind == .make)
+    }
+
+    @Test("按着 ⌥ 但扔偏了，不会被当成粉碎")
+    func armedMissIsNotShred() {
+        let shredder = ShredderGeometry(rect: ShredderGeometry.rect(above: basket))
+        let wide = TossedPaper(itemID: "", born: 0, start: CGPoint(x: 300, y: 250), velocity: CGVector(dx: 600, dy: -323),
+                               seed: 1, icon: nil, startCrumple: 0, basket: basket, canvas: size, shredder: shredder)
+        #expect(wide.kind != .shred)
     }
 
     @Test("直接放进篓里也算投中")
