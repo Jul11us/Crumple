@@ -674,7 +674,7 @@ final class AppModel {
         let task = Task {
             let started = Date()
             let work = Task.detached(priority: .userInitiated) {
-                DuplicateFinder.scan(minBytes: minBytes, ignored: ignored) { text in
+                await DuplicateFinder.scan(minBytes: minBytes, ignored: ignored) { text in
                     Task { @MainActor in self.dupProgress = text }
                 }
             }

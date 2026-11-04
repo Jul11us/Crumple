@@ -247,7 +247,7 @@ struct CancelScanTests {
         #expect(await files.value.isEmpty)
         let copies = Task.detached {
             withUnsafeCurrentTask { $0?.cancel() }
-            return DuplicateFinder.scan(minBytes: 1, ignored: []) { _ in }
+            return await DuplicateFinder.scan(minBytes: 1, ignored: []) { _ in }
         }
         #expect(await copies.value.isEmpty)
     }

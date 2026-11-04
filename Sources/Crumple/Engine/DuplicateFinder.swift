@@ -6,7 +6,7 @@ import CryptoKit
 /// Files are first grouped by size, then by a hash of a few small samples, and only the
 /// survivors are hashed in full, so most files are never read at all.
 enum DuplicateFinder {
-    private struct Candidate {
+    private struct Candidate: Sendable {
         let url: URL
         let size: Int64
         let allocated: Int64
@@ -14,7 +14,44 @@ enum DuplicateFinder {
         let modified: Date
     }
 
-    static func scan(minBytes: Int64, ignored: [String], progress: @escaping @Sendable (String) -> Void) -> [CleanItem] {
+    static func scan(minBytes: Int64, ignored: [String], progress: @escaping @Sendable (String) -> Void) async -> [CleanItem] {
+        guard let (bySize, checked) = listBySize(minBytes: minBytes, ignored: ignored, progress: progress) else { return [] }
+
+        let sameSize = bySize.values.filter { $0.count > 1 }.flatMap { $0 }
+        let total = sameSize.count
+        var compared = 0
+
+        // Cheap pass: a few samples from each file that shares its size with another.
+        let sampled = await hashAll(sameSize) {
+            compared += 1
+            if compared % 20 == 0 { progress(String(localized: "正在比对内容 \(compared)/\(total)")) }
+        } hash: { sampleHash($0.url, size: $0.size) }
+        if Task.isCancelled { return [] }
+
+        // Thorough pass: the whole file, only for files that still look alike.
+        let alike = Dictionary(grouping: sampled) { "\($0.file.size):\($0.hash)" }.values
+            .filter { $0.count > 1 }.flatMap { $0.map(\.file) }
+        let hashed = await hashAll(alike) {} hash: { fullHash($0.url) }
+        if Task.isCancelled { return [] }
+
+        var items: [CleanItem] = []
+        for copies in Dictionary(grouping: hashed, by: { "\($0.file.size):\($0.hash)" }).values where copies.count > 1 {
+            items += describe(copies.map(\.file), group: copies[0].hash)
+        }
+        progress(String(localized: "已检查 \(checked.formatted()) 个文件"))
+
+        // Biggest waste first, and copies of the same file next to each other.
+        let wasted = Dictionary(grouping: items) { $0.keeper?.path ?? "" }.mapValues { $0.reduce(0) { $0 + $1.size } }
+        return items.sorted {
+            let a = wasted[$0.keeper?.path ?? ""] ?? 0, b = wasted[$1.keeper?.path ?? ""] ?? 0
+            return a != b ? a > b : $0.url.path < $1.url.path
+        }
+    }
+
+    /// Walks the personal folders and groups the files worth comparing by size; nil when the scan is
+    /// stopped. Kept synchronous: the directory enumerator can't be iterated from async code.
+    private static func listBySize(minBytes: Int64, ignored: [String],
+                                   progress: @Sendable (String) -> Void) -> (bySize: [Int64: [Candidate]], checked: Int)? {
         let keys: [URLResourceKey] = [.isRegularFileKey, .isPackageKey, .fileSizeKey, .totalFileAllocatedSizeKey,
                                       .creationDateKey, .contentModificationDateKey, .fileResourceIdentifierKey]
         let keySet = Set(keys)
@@ -31,7 +68,7 @@ enum DuplicateFinder {
             ) else { continue }
             for case let url as URL in enumerator {
                 checked += 1
-                if checked % 500 == 0, Task.isCancelled { return [] }
+                if checked % 500 == 0, Task.isCancelled { return nil }
                 if checked % 500 == 0 { progress(String(localized: "已检查 \(checked.formatted()) 个文件")) }
                 if ignore.contains(url) {
                     enumerator.skipDescendants()
@@ -54,40 +91,29 @@ enum DuplicateFinder {
                 ))
             }
         }
+        return (bySize, checked)
+    }
 
-        let sameSize = bySize.values.filter { $0.count > 1 }
-        let total = sameSize.reduce(0) { $0 + $1.count }
-        var compared = 0
-        var items: [CleanItem] = []
-        for group in sameSize {
-            // Cheap pass: a few samples from each file.
-            var bySample: [String: [Candidate]] = [:]
-            if Task.isCancelled { return [] }
-            for file in group {
-                compared += 1
-                if compared % 20 == 0 { progress(String(localized: "正在比对内容 \(compared)/\(total)")) }
-                guard let key = sampleHash(file.url, size: file.size) else { continue }
-                bySample[key, default: []].append(file)
-            }
-            // Thorough pass: the whole file, only for files that still look alike.
-            for similar in bySample.values where similar.count > 1 {
-                var byContent: [String: [Candidate]] = [:]
-                for file in similar {
-                    guard let key = fullHash(file.url) else { continue }
-                    byContent[key, default: []].append(file)
-                }
-                for (hash, copies) in byContent where copies.count > 1 {
-                    items += describe(copies, group: hash)
-                }
-            }
-        }
-        progress(String(localized: "已检查 \(checked.formatted()) 个文件"))
+    /// How many files are hashed at once. A few keep a solid-state disk busy; more only make the reads queue.
+    private static let hashWidth = 4
 
-        // Biggest waste first, and copies of the same file next to each other.
-        let wasted = Dictionary(grouping: items) { $0.keeper?.path ?? "" }.mapValues { $0.reduce(0) { $0 + $1.size } }
-        return items.sorted {
-            let a = wasted[$0.keeper?.path ?? ""] ?? 0, b = wasted[$1.keeper?.path ?? ""] ?? 0
-            return a != b ? a > b : $0.url.path < $1.url.path
+    /// Hashes `files` a few at a time, dropping any that can't be read. The child tasks see the
+    /// scan's cancellation, so `fullHash` stops mid-file when the scan is stopped.
+    private static func hashAll(_ files: [Candidate], onEach: () -> Void,
+                                hash: @escaping @Sendable (Candidate) -> String?) async -> [(file: Candidate, hash: String)] {
+        await withTaskGroup(of: (Candidate, String?).self) { group in
+            var results: [(file: Candidate, hash: String)] = []
+            var queue = files.makeIterator()
+            for _ in 0..<hashWidth {
+                guard let file = queue.next() else { break }
+                group.addTask { (file, hash(file)) }
+            }
+            while let (file, key) = await group.next() {
+                onEach()
+                if let key { results.append((file, key)) }
+                if !Task.isCancelled, let next = queue.next() { group.addTask { (next, hash(next)) } }
+            }
+            return results
         }
     }
 
