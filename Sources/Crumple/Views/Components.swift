@@ -71,6 +71,45 @@ struct Hoverable<Content: View>: View {
     }
 }
 
+// MARK: - Icons
+
+final class IconLoader: ObservableObject {
+    /// The icon and the item it belongs to, so a reused view never shows the previous item's icon.
+    @Published var loaded: (id: String, image: NSImage)?
+}
+
+/// A file's or app's icon. Shown at once if it's already read; otherwise a quiet tile stands in
+/// while it loads off the main thread, so scrolling a long list never waits for it.
+struct ItemIcon: View {
+    let item: CleanItem
+    var size: CGFloat = 32
+    @Environment(AppModel.self) private var model
+    @StateObject private var loader = IconLoader()
+
+    var body: some View {
+        let image = model.icons.cached(item) ?? (loader.loaded?.id == item.id ? loader.loaded?.image : nil)
+        ZStack {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .transition(.opacity)
+            } else {
+                RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+                    .fill(Theme.fill.opacity(0.06))
+                    .padding(size * 0.1)
+            }
+        }
+        .frame(width: size, height: size)
+        .task(id: item.id) {
+            guard model.icons.cached(item) == nil else { return }
+            let icon = await model.icons.load(item)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.15)) { loader.loaded = (item.id, icon) }
+        }
+    }
+}
+
 // MARK: - Buttons
 
 struct PrimaryButtonStyle: ButtonStyle {

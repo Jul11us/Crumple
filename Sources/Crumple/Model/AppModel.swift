@@ -55,15 +55,57 @@ final class CleanCategory: Identifiable {
     }
 }
 
+/// File and app icons. Reading one costs a couple of milliseconds, so rows load theirs off the main
+/// thread (`load`), and scans read ahead the ones about to be shown (`prefetch`).
 @MainActor
 final class IconCache {
     private var cache: [String: NSImage] = [:]
+    private var pending: [String: Task<SendableImage, Never>] = [:]
 
+    /// NSWorkspace hands out icons from any thread; the image is only read once it's back on the main one.
+    struct SendableImage: @unchecked Sendable { let image: NSImage }
+
+    private static func path(of item: CleanItem) -> String { (item.appURL ?? item.url).path }
+
+    func cached(_ item: CleanItem) -> NSImage? { cache[item.id] }
+
+    /// Right now, on the main thread if it isn't cached yet. For the paper stage, which needs it at once.
     func icon(for item: CleanItem) -> NSImage {
         if let icon = cache[item.id] { return icon }
-        let icon = NSWorkspace.shared.icon(forFile: (item.appURL ?? item.url).path)
+        let icon = NSWorkspace.shared.icon(forFile: Self.path(of: item))
         cache[item.id] = icon
         return icon
+    }
+
+    /// Reads the icon in the background; several rows asking for the same one share a single read.
+    func load(_ item: CleanItem) async -> NSImage {
+        if let icon = cache[item.id] { return icon }
+        let id = item.id
+        let task = pending[id] ?? {
+            let path = Self.path(of: item)
+            let task = Task.detached(priority: .userInitiated) { SendableImage(image: NSWorkspace.shared.icon(forFile: path)) }
+            pending[id] = task
+            return task
+        }()
+        let icon = await task.value.image
+        cache[id] = icon
+        pending[id] = nil
+        return icon
+    }
+
+    /// Reads the first few icons of a list before it appears, one after another at low priority.
+    func prefetch(_ items: [CleanItem], first count: Int = 40) {
+        let todo = items.prefix(count).filter { cache[$0.id] == nil && pending[$0.id] == nil }
+        guard !todo.isEmpty else { return }
+        let jobs = todo.map { (id: $0.id, path: Self.path(of: $0)) }
+        Task.detached(priority: .utility) {
+            for job in jobs {
+                let icon = SendableImage(image: NSWorkspace.shared.icon(forFile: job.path))
+                await MainActor.run { [weak self] in
+                    if self?.cache[job.id] == nil { self?.cache[job.id] = icon.image }
+                }
+            }
+        }
     }
 }
 
@@ -530,6 +572,7 @@ final class AppModel {
                 let items = Scanner.scan(kind, runningBundleIDs: running, oldDownloadDays: days)
                     .filter { !IgnoreList.contains($0.url, in: ignored) }
                 await MainActor.run {
+                    self.icons.prefetch(items, first: 20)
                     category.items = items
                     category.isScanning = false
                 }
@@ -609,6 +652,8 @@ final class AppModel {
                 }
             }
             let items = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
+            // Read the first icons while the scan screen finishes, so the list appears with them.
+            if !Task.isCancelled { icons.prefetch(items) }
             let remaining = 1.4 - Date().timeIntervalSince(started)
             if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
             guard !Task.isCancelled else { return }
@@ -679,6 +724,8 @@ final class AppModel {
                 }
             }
             let items = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
+            // Read the first icons while the scan screen finishes, so the list appears with them.
+            if !Task.isCancelled { icons.prefetch(items) }
             let remaining = 1.4 - Date().timeIntervalSince(started)
             if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
             guard !Task.isCancelled else { return }
@@ -734,6 +781,7 @@ final class AppModel {
                     Task { @MainActor in self.appsProgress = (done, total) }
                 }
             }.value
+            if !Task.isCancelled { icons.prefetch(items) }
             let remaining = 1.4 - Date().timeIntervalSince(started)
             if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
             guard !Task.isCancelled else { return }

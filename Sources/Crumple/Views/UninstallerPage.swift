@@ -102,10 +102,7 @@ private struct AppDetailPanel: View {
         VStack(alignment: .leading, spacing: 16) {
             if let app {
                 HStack(spacing: 16) {
-                    Image(nsImage: model.icons.icon(for: app))
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: 64, height: 64)
+                    ItemIcon(item: app, size: 64)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(app.name).font(.system(size: 18, weight: .semibold)).lineLimit(1)
                         Text(app.version.map { String(localized: "版本 \($0)") } ?? String(localized: "未知版本"))

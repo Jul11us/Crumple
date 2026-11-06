@@ -55,10 +55,7 @@ struct ItemRow: View {
         Hoverable { hovering in
             HStack(spacing: 12) {
                 CheckBox(state: item.isSelected ? .on : .off, tint: category.kind.color, label: item.name) { category.toggle(item.id) }
-                Image(nsImage: model.icons.icon(for: item))
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: 32, height: 32)
+                ItemIcon(item: item)
                     .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(StageSpace.name)) } action: { model.iconFrames[item.id] = $0 }
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
