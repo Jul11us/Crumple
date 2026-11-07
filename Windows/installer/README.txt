@@ -1,14 +1,15 @@
-Crumple for Windows 1.1.1
+Crumple for Windows 1.2.0
 =========================
 
 简体中文
 --------
 适用于 Windows 10 / Windows 11 64 位电脑。
-安装版：双击 Crumple-1.1.1-Windows-x64-Setup.exe，按向导完成安装。
-免安装版：双击 Crumple-1.1.1-Windows-x64.exe，可直接运行。
+安装版：双击 Crumple-1.2.0-Windows-x64-Setup.exe，按向导完成安装。
+免安装版：双击 Crumple-1.2.0-Windows-x64.exe，可直接运行。
 程序已包含 .NET 运行环境，无需安装开发工具。
 
-智能清理：检查用户临时文件、浏览器缓存、崩溃报告、开发缓存、安装包和旧下载。
+智能清理：检查用户临时文件、浏览器缓存、崩溃报告、开发缓存、AI 工具残留、安装包和旧下载。
+AI 工具的运行时、模型和对话记录默认不勾选；关联工具运行时会保护其文件。
 大文件与重复文件：扫描桌面、文档、下载、图片、音乐、视频及设置中添加的文件夹。
 空间分析：选择文件夹后双击条目逐层查看。
 应用卸载和优化：打开对应的 Windows 系统维护工具完成操作。
@@ -30,7 +31,8 @@ Run the Setup exe to install, or use the standalone exe without installation.
 The .NET runtime is included. Developer tools are not required.
 
 Smart clean reviews temporary files, browser caches, crash reports, developer caches,
-installers and old downloads. Installers, old downloads and developer caches start unselected.
+AI tool leftovers, installers and old downloads. Installers, old downloads and developer caches start unselected.
+AI runtimes, models and conversations start unselected; running tools protect their files.
 Large Files and Duplicates scan personal folders and any folders explicitly added in Settings.
 Space Lens explores logical file sizes. Double-click a folder to explore inside it.
 Uninstaller and Optimize open the corresponding Windows maintenance tools.

@@ -1,5 +1,17 @@
 # 本机验证
 
+## 2026-11-06 · Crumple 1.2.0
+
+- `swift test`：8 组、38 项测试通过，包含 AI 工具缓存与大下载的默认选择、运行中保护、项目路径识别和分类去重。
+- `bash scripts/build.sh`：arm64、x86_64 发布构建通过；版本 1.2.0，构建号 4，490 个中英文本地化键。`bash Localization/verify.sh`：中英文各 31 项打包资源检查通过。
+- 原生 SwiftUI 演示渲染生成三套主题共 43 张界面预览，检查智能清理结果里的 AI 工具分类；扫描与清理仅操作独立演示目录。
+- `bash scripts/build-windows.sh`：23 项核心测试通过，Windows x64 单文件发布通过，程序自带运行环境。
+- Avalonia 在 macOS 上生成三套主题共 50 张界面预览；演示拖拽确认文件落入独立模拟回收站。
+- Windows Setup 归档完整性检查通过，安装包内 exe 与免安装 exe 内容一致，随包使用说明与当前源文件一致；两个 exe 的 GUI PE 结构、CPU 架构和 SHA-256 已检查。
+- macOS DMG 完整性、只读挂载、包内应用严格签名检查及与构建版的逐文件比对通过；确认 Applications 链接、原有安装窗口布局、背景和卷图标。安装包与 SHA-256 在 `build/publish/1.2.0/`。
+
+日志在 `build/logs/release-1.2.0-*`，界面预览在 `build/previews/release-1.2.0/`。运行检查在 Apple 芯片 Mac 上完成，Intel 为交叉编译。macOS 使用临时签名、尚未 Apple 公证；Windows 为未签名预览版，回收站、卸载程序、开机启动项和声音等 Windows 系统调用尚未在 Windows 实机验证。
+
 ## 2026-10-31 · 浅色默认与 unslop 界面调整
 
 - `bash scripts/build.sh`：arm64、x86_64 发布构建通过，共提取 470 个中英文本地化键；应用严格签名检查通过。

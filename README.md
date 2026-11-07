@@ -15,7 +15,7 @@ Find what you no longer need. Crumple it. Let it go.
 
 <br>
 
-**[Download for macOS](https://github.com/Jul11us/Crumple/releases/tag/v1.1.1-macos)** &nbsp; / &nbsp; **[Windows Preview](https://github.com/Jul11us/Crumple/releases/tag/v1.1.1-windows)**
+**[Download for macOS](https://github.com/Jul11us/Crumple/releases/tag/v1.2.0-macos)** &nbsp; / &nbsp; **[Windows Preview](https://github.com/Jul11us/Crumple/releases/tag/v1.2.0-windows)**
 
 [The experience](#a-small-gesture-a-little-more-space) &nbsp; · &nbsp; [Tools](#everything-in-its-place) &nbsp; · &nbsp; [Build](#under-the-paper) &nbsp; · &nbsp; [简体中文](README.zh-CN.md)
 
@@ -43,7 +43,7 @@ Paper tones, ink, a serif heading. Three considered appearances—Mist, Kraft an
 | | macOS | Windows Preview |
 | :--- | :--- | :--- |
 | **System** | macOS 14 or later | Windows 10 / 11, x64 |
-| **Download** | [Universal DMG](https://github.com/Jul11us/Crumple/releases/download/v1.1.1-macos/Crumple-1.1.1-macOS-universal.dmg) | [Setup exe](https://github.com/Jul11us/Crumple/releases/download/v1.1.1-windows/Crumple-1.1.1-Windows-x64-Setup.exe) · [Standalone exe](https://github.com/Jul11us/Crumple/releases/download/v1.1.1-windows/Crumple-1.1.1-Windows-x64.exe) |
+| **Download** | [Universal DMG](https://github.com/Jul11us/Crumple/releases/download/v1.2.0-macos/Crumple-1.2.0-macOS-universal.dmg) | [Setup exe](https://github.com/Jul11us/Crumple/releases/download/v1.2.0-windows/Crumple-1.2.0-Windows-x64-Setup.exe) · [Standalone exe](https://github.com/Jul11us/Crumple/releases/download/v1.2.0-windows/Crumple-1.2.0-Windows-x64.exe) |
 | **Install** | Open the DMG; drag Crumple to Applications | Run Setup, or open the standalone exe |
 | **Built with** | SwiftUI & AppKit · Apple silicon and Intel | C# & Avalonia · .NET runtime included |
 

@@ -1,4 +1,4 @@
-param([string]$Executable = (Join-Path (Split-Path -Parent $PSScriptRoot) 'build/releases/windows/Crumple-1.1.1-Windows-x64.exe'))
+param([string]$Executable = (Join-Path (Split-Path -Parent $PSScriptRoot) 'build/releases/windows/Crumple-1.2.0-Windows-x64.exe'))
 $ErrorActionPreference = 'Stop'
 # Runs the real exe offscreen in demo mode: scans, a smart clean, a throw by hand into the basket,
 # and screenshots of every page in all three themes. Only a new demo folder is touched.

@@ -9,8 +9,8 @@ Windows 版本，使用 C#、.NET 10 和 [Avalonia](https://avaloniaui.net)。�
 
 输出目录为 `build/releases/windows/`：
 
-- `Crumple-1.1.1-Windows-x64-Setup.exe`：安装向导，为当前用户安装到 `%LOCALAPPDATA%\Programs\Crumple`，创建开始菜单快捷方式及系统卸载入口。
-- `Crumple-1.1.1-Windows-x64.exe`：免安装单文件程序。
+- `Crumple-1.2.0-Windows-x64-Setup.exe`：安装向导，为当前用户安装到 `%LOCALAPPDATA%\Programs\Crumple`，创建开始菜单快捷方式及系统卸载入口。
+- `Crumple-1.2.0-Windows-x64.exe`：免安装单文件程序。
 - `README.txt`：中英文使用说明。
 - `THIRD-PARTY-NOTICES.txt`：随包组件许可，程序内设置页也可查看。
 - `SHA256SUMS.txt`：实际交付 exe 的 SHA-256 校验值。
@@ -67,7 +67,7 @@ dotnet run --project Windows/Crumple.Core.Tests -c Release
 python3 scripts/verify-windows-package.py build/releases/windows
 ```
 
-22 项核心测试覆盖路径边界、忽略项、系统目录、链接替换、变更文件保护、正在运行的应用、回收与恢复、覆盖冲突、记录写入失败、取消、下载默认选择、完整哈希、保留副本、物理文件标识、空间统计与原子 JSON 存储。它们可以在 macOS 或 Windows 上执行，不使用真实用户文件。
+23 项核心测试覆盖路径边界、忽略项、系统目录、链接替换、变更文件保护、正在运行的应用、回收与恢复、覆盖冲突、记录写入失败、取消、下载与 AI 文件默认选择、完整哈希、保留副本、物理文件标识、空间统计与原子 JSON 存储。它们可以在 macOS 或 Windows 上执行，不使用真实用户文件。
 
 Windows 实机测试：
 
@@ -90,7 +90,7 @@ dotnet run --project Windows/Crumple.Desktop -- --render build/previews/windows 
 单独体验演示模式：
 
 ```powershell
-.\Crumple-1.1.1-Windows-x64.exe --demo
+.\Crumple-1.2.0-Windows-x64.exe --demo
 ```
 
 演示目录由程序创建并保留供检查，不接触真实用户目录或真实回收站。

@@ -15,7 +15,7 @@
 
 <br>
 
-**[下载 macOS 版](https://github.com/Jul11us/Crumple/releases/tag/v1.1.1-macos)** &nbsp; / &nbsp; **[Windows 预览版](https://github.com/Jul11us/Crumple/releases/tag/v1.1.1-windows)**
+**[下载 macOS 版](https://github.com/Jul11us/Crumple/releases/tag/v1.2.0-macos)** &nbsp; / &nbsp; **[Windows 预览版](https://github.com/Jul11us/Crumple/releases/tag/v1.2.0-windows)**
 
 [整理的手感](#一个小动作腾出一点空间) &nbsp; · &nbsp; [功能](#让每一份空间都有去处) &nbsp; · &nbsp; [构建](#纸张背后) &nbsp; · &nbsp; [English](README.md)
 
@@ -43,7 +43,7 @@ Crumple 把一个熟悉的小动作，带回日常整理。拖起文件，它会
 | | macOS | Windows 预览版 |
 | :--- | :--- | :--- |
 | **系统** | macOS 14 或更新版本 | Windows 10 / 11，x64 |
-| **下载** | [通用版 DMG](https://github.com/Jul11us/Crumple/releases/download/v1.1.1-macos/Crumple-1.1.1-macOS-universal.dmg) | [安装版 exe](https://github.com/Jul11us/Crumple/releases/download/v1.1.1-windows/Crumple-1.1.1-Windows-x64-Setup.exe) · [免安装 exe](https://github.com/Jul11us/Crumple/releases/download/v1.1.1-windows/Crumple-1.1.1-Windows-x64.exe) |
+| **下载** | [通用版 DMG](https://github.com/Jul11us/Crumple/releases/download/v1.2.0-macos/Crumple-1.2.0-macOS-universal.dmg) | [安装版 exe](https://github.com/Jul11us/Crumple/releases/download/v1.2.0-windows/Crumple-1.2.0-Windows-x64-Setup.exe) · [免安装 exe](https://github.com/Jul11us/Crumple/releases/download/v1.2.0-windows/Crumple-1.2.0-Windows-x64.exe) |
 | **安装** | 打开 DMG，将 Crumple 拖入「应用程序」 | 运行安装向导，或直接打开免安装程序 |
 | **实现** | SwiftUI 与 AppKit · Apple 芯片和 Intel 通用 | C# 与 Avalonia · 自带 .NET 运行环境 |
 

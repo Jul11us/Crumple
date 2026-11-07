@@ -6,7 +6,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
     <DebugType>embedded</DebugType>
-    <Version>1.1.1</Version>
+    <Version>1.2.0</Version>
     <Company>Crumple</Company>
     <Authors>Crumple</Authors>
     <Copyright>Copyright © 2026 Crumple</Copyright>

@@ -48,7 +48,7 @@ internal sealed class SettingsView : Border
             Section(L("记录"), L("只会删除记录，不影响任何文件。"),
                 Line(L("清理记录"), new UiButton(L("清空记录"), model.ClearHistory, ButtonKind.Secondary).Disabled(model.History.Count == 0))),
             Section(L("关于"), null,
-                Line("Crumple", Text(L("版本 %@", typeof(SettingsView).Assembly.GetName().Version?.ToString(3) ?? "1.1.1"), 13, brush: Ink.Secondary))));
+                Line("Crumple", Text(L("版本 %@", typeof(SettingsView).Assembly.GetName().Version?.ToString(3) ?? "1.2.0"), 13, brush: Ink.Secondary))));
         content.Margin = new Thickness(28, 24);
         Child = Common.Scroll("settings", content);
     }

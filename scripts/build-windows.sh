@@ -21,7 +21,7 @@ mkdir -p "$OUT" "$RELEASES"
 python3 scripts/windows-strings.py
 "$DOTNET_BIN" run --project Windows/Crumple.Core.Tests -c Release
 "$DOTNET_BIN" publish Windows/Crumple.Desktop/Crumple.Desktop.csproj -c Release -r "$RID" -o "$OUT"
-NAME="Crumple-1.1.1-Windows-${RID#win-}"
+NAME="Crumple-1.2.0-Windows-${RID#win-}"
 cp "$OUT/Crumple.exe" "$RELEASES/$NAME.exe"
 python3 scripts/package-windows.py "$RID"
 MAKENSIS_BIN="${CRUMPLE_MAKENSIS:-makensis}"

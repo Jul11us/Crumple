@@ -13,7 +13,7 @@ Unicode true
 !ifndef NOTICES
   !error "Pass -DNOTICES=/absolute/path/THIRD-PARTY-NOTICES.txt"
 !endif
-!define VERSION "1.1.1"
+!define VERSION "1.2.0"
 !define APPKEY "Software\Crumple"
 !define UNINSTALLKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\Crumple"
 
@@ -24,7 +24,7 @@ InstallDirRegKey HKCU "${APPKEY}" "InstallLocation"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
 BrandingText "Crumple · ${VERSION}"
-VIProductVersion "1.1.1.0"
+VIProductVersion "1.2.0.0"
 VIAddVersionKey /LANG=1033 "ProductName" "Crumple for Windows"
 VIAddVersionKey /LANG=1033 "FileDescription" "Crumple Windows installer (x64)"
 VIAddVersionKey /LANG=1033 "ProductVersion" "${VERSION}"

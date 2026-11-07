@@ -13,7 +13,7 @@ try {
     New-Item -ItemType Directory -Force $out, $release | Out-Null
     dotnet publish Windows/Crumple.Desktop/Crumple.Desktop.csproj -c Release -r $Runtime -o $out
     if ($LASTEXITCODE -ne 0) { throw 'Windows publish failed.' }
-    $name = 'Crumple-1.1.1-Windows-' + $Runtime.Substring(4)
+    $name = 'Crumple-1.2.0-Windows-' + $Runtime.Substring(4)
     Copy-Item "$out/Crumple.exe" "$release/$name.exe"
     Copy-Item Windows/installer/README.txt "$release/README.txt"
     Copy-Item Windows/THIRD-PARTY-NOTICES.txt "$release/THIRD-PARTY-NOTICES.txt"
