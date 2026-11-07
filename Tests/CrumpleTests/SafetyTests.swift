@@ -236,6 +236,110 @@ struct ScannerTests {
     }
 }
 
+/// AI tools keep caches, big downloads and conversations side by side; only the caches are ticked, and nothing
+/// of a tool that is running goes in the basket.
+@Suite("AI 工具残留")
+struct AIToolTests {
+    let fm = FileManager.default
+
+    func sandbox() throws -> URL {
+        let url = Paths.home.appendingPathComponent("Library/Caches/\(Scanner.ownBundleID).tests/\(UUID().uuidString)")
+        try fm.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    func fill(_ home: URL, _ path: String, bytes: Int = 4_096) throws {
+        let dir = home.appendingPathComponent(path)
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data(count: bytes).write(to: dir.appendingPathComponent("blob.bin"))
+    }
+
+    @Test("缓存勾选，大下载和对话记录只列出来")
+    func tiersDecideTheTick() throws {
+        let home = try sandbox()
+        defer { removeSandbox(home) }
+        try fill(home, "Library/Application Support/Claude/Cache", bytes: 8_192)
+        try fill(home, "Library/Application Support/Claude/Code Cache", bytes: 4_096)
+        try fill(home, "Library/Application Support/Claude/vm_bundles/claudevm.bundle", bytes: 65_536)
+        try fill(home, ".codex/cache")
+        try fill(home, ".codex/sessions")
+        try fill(home, ".cache/codex-runtimes")
+
+        let items = Scanner.scanAITools(home, running: [])
+        let byName = Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0) })
+        let caches = try #require(byName["Claude · 应用缓存"])
+        #expect(caches.isSelected && caches.badge == nil)
+        #expect(caches.components.count == 2 && caches.size >= 12_288)
+        #expect(byName["Claude · 虚拟机镜像"]?.isSelected == false)
+        #expect(byName["Claude · 虚拟机镜像"]?.badge == "删后需重新下载")
+        #expect(byName["Codex · 缓存"]?.isSelected == true)
+        #expect(byName["Codex · 运行时"]?.isSelected == false)
+        #expect(byName["Codex · 对话记录"]?.isSelected == false)
+        #expect(byName["Codex · 对话记录"]?.badge == "对话记录")
+        #expect(items.allSatisfy { !$0.ownerProcesses.isEmpty })
+    }
+
+    @Test("工具还在运行时，它的文件不勾选并标注运行中")
+    func runningToolsAreLeftAlone() throws {
+        let home = try sandbox()
+        defer { removeSandbox(home) }
+        try fill(home, ".codex/cache")
+        try fill(home, ".claude/cache")
+        let items = Scanner.scanAITools(home, running: ["Codex Helper (GPU)"])
+        let codex = try #require(items.first { $0.name == "Codex · 缓存" })
+        #expect(!codex.isSelected && codex.badge == "运行中")
+        let claude = try #require(items.first { $0.name == "Claude Code · 缓存" })
+        #expect(claude.isSelected && claude.badge == nil)
+        #expect(ProcessWatch.isRunning(any: [ProcessInfo.processInfo.processName]))
+        #expect(!ProcessWatch.isRunning(any: ["crumple-no-such-process"]))
+    }
+
+    @Test("项目文件夹名能读回路径：连字符、空格都认，中文认不出就不下结论")
+    func projectSlugsReadBack() throws {
+        let home = try sandbox()
+        defer { removeSandbox(home) }
+        let spaced = home.appendingPathComponent("Desktop/My App 2")
+        let dashed = home.appendingPathComponent("Desktop/my-app.v2")
+        try fm.createDirectory(at: spaced, withIntermediateDirectories: true)
+        try fm.createDirectory(at: dashed, withIntermediateDirectories: true)
+
+        #expect(Scanner.projectPath(fromSlug: Scanner.projectSlug(for: spaced))?.standardizedFileURL == spaced.standardizedFileURL)
+        #expect(Scanner.projectPath(fromSlug: Scanner.projectSlug(for: dashed))?.standardizedFileURL == dashed.standardizedFileURL)
+        #expect(Scanner.projectPath(fromSlug: Scanner.projectSlug(for: home.appendingPathComponent("Desktop/Gone"))) == nil)
+        #expect(Scanner.projectPathIsReadable(Scanner.projectSlug(for: dashed)))
+        #expect(!Scanner.projectPathIsReadable(Scanner.projectSlug(for: home.appendingPathComponent("Desktop/称心计划"))))
+        #expect(Scanner.projectPath(fromSlug: "not-a-slug") == nil)
+    }
+
+    @Test("对话记录按项目列出，项目没了就标出来")
+    func conversationsPerProject() throws {
+        let home = try sandbox()
+        defer { removeSandbox(home) }
+        try fm.createDirectory(at: home.appendingPathComponent("Documents"), withIntermediateDirectories: true)
+        try fill(home, ".claude/projects/\(Scanner.projectSlug(for: home.appendingPathComponent("Documents")))")
+        try fill(home, ".claude/projects/\(Scanner.projectSlug(for: home.appendingPathComponent("Desktop/Old-Project")))")
+        try fill(home, ".claude/projects/\(Scanner.projectSlug(for: home.appendingPathComponent("称心计划")))")
+
+        let items = Scanner.scanAITools(home, running: [])
+        let records = items.filter { $0.name.hasPrefix("Claude Code · ") && $0.name.hasSuffix(" 的对话记录") }
+        #expect(records.count == 3 && records.allSatisfy { !$0.isSelected })
+        #expect(records.first { $0.name.contains("Documents") }?.badge == "对话记录")
+        #expect(records.first { $0.name.contains("Desktop-Old-Project") }?.badge == "项目已不存在")
+        #expect(records.contains { $0.name == "Claude Code · Desktop-Old-Project 的对话记录" }, "\(records.map(\.name))")
+        #expect(records.first { $0.name.contains("----") }?.badge == "对话记录")
+    }
+
+    @Test("~/.cache 里属于 AI 工具的文件夹不再出现在开发工具缓存里")
+    func dotCacheIsNotListedTwice() throws {
+        let home = try sandbox()
+        defer { removeSandbox(home) }
+        try fill(home, ".cache/codex-runtimes")
+        try fill(home, ".cache/pip")
+        let ai = Scanner.scanAITools(home, running: []).map(\.url.lastPathComponent)
+        #expect(ai.contains("codex-runtimes") && !ai.contains("pip"))
+    }
+}
+
 @Suite("停止扫描")
 struct CancelScanTests {
     @Test("停止后扫描马上收手，不交出半截结果")

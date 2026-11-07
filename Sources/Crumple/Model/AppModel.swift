@@ -562,6 +562,7 @@ final class AppModel {
             revealed = []
         }
         let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+        let processes = ProcessWatch.runningNames()
         let days = oldDownloadDays
         let ignored = ignoredPaths
         for category in junk {
@@ -569,7 +570,7 @@ final class AppModel {
             category.items = []
             let kind = category.kind
             Task.detached(priority: .userInitiated) {
-                let items = Scanner.scan(kind, runningBundleIDs: running, oldDownloadDays: days)
+                let items = Scanner.scan(kind, runningBundleIDs: running, runningProcesses: processes, oldDownloadDays: days)
                     .filter { !IgnoreList.contains($0.url, in: ignored) }
                 await MainActor.run {
                     self.icons.prefetch(items, first: 20)
@@ -936,6 +937,11 @@ final class AppModel {
                 return owner == id || owner.hasPrefix(id + ".")
             }
             if running { return String(localized: "\(item.name) 正在运行，投不进去") }
+        }
+        // Command-line agents have no bundle ID; their items are named "Tool · what", so the tool's name comes first.
+        if ProcessWatch.isRunning(any: item.ownerProcesses) {
+            let owner = item.name.components(separatedBy: " · ").first ?? item.name
+            return String(localized: "\(owner) 正在运行，投不进去")
         }
         // Never throw away the last copy of a duplicate.
         if let keeper = item.keeper, !FileManager.default.fileExists(atPath: keeper.path) {

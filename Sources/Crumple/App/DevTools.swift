@@ -361,9 +361,10 @@ enum DevTools {
     /// Prints what a scan would find, without touching anything. Skips Downloads to avoid a privacy prompt.
     static func printScanReport() {
         let running = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+        let processes = ProcessWatch.runningNames()
         for kind in CategoryKind.junk where kind != .installers && kind != .oldDownloads {
             let start = Date()
-            let items = Scanner.scan(kind, runningBundleIDs: running)
+            let items = Scanner.scan(kind, runningBundleIDs: running, runningProcesses: processes)
             let total = items.reduce(Int64(0)) { $0 + $1.size }
             let picked = items.filter(\.isSelected).reduce(Int64(0)) { $0 + $1.size }
             print("== \(kind.title): \(items.count) 项, 共 \(total.byteString), 默认勾选 \(picked.byteString)  (\(String(format: "%.1f", Date().timeIntervalSince(start)))s)")

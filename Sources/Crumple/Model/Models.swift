@@ -216,10 +216,10 @@ enum ListPhase { case landing, scanning, results }
 // MARK: - Categories
 
 enum CategoryKind: String, CaseIterable, Identifiable {
-    case appCaches, logs, xcode, devCaches, installers, oldDownloads, largeFiles, duplicates, applications
+    case appCaches, logs, xcode, devCaches, aiTools, installers, oldDownloads, largeFiles, duplicates, applications
 
     /// The categories that make up a smart clean.
-    static let junk: [CategoryKind] = [.appCaches, .logs, .xcode, .devCaches, .installers, .oldDownloads]
+    static let junk: [CategoryKind] = [.appCaches, .logs, .xcode, .devCaches, .aiTools, .installers, .oldDownloads]
 
     var id: String { rawValue }
 
@@ -229,6 +229,7 @@ enum CategoryKind: String, CaseIterable, Identifiable {
         case .logs: String(localized: "日志文件")
         case .xcode: String(localized: "Xcode 垃圾")
         case .devCaches: String(localized: "开发工具缓存")
+        case .aiTools: String(localized: "AI 工具残留")
         case .installers: String(localized: "安装包")
         case .oldDownloads: String(localized: "旧下载文件")
         case .largeFiles: String(localized: "大文件")
@@ -243,6 +244,7 @@ enum CategoryKind: String, CaseIterable, Identifiable {
         case .logs: String(localized: "应用和系统组件写下的运行日志与崩溃报告。")
         case .xcode: String(localized: "编译产物（DerivedData）、旧设备支持文件和模拟器缓存。归档默认不勾选。")
         case .devCaches: String(localized: "npm、Gradle、Cargo、pip 等包管理器下载的缓存，需要时会重新下载。")
+        case .aiTools: String(localized: "Claude、Codex、Cursor 等 AI 工具留下的缓存、运行时、模型和对话记录。缓存默认勾选；体积大的下载和对话记录只列出来，由你决定。")
         case .installers: String(localized: "下载文件夹里的 .dmg / .pkg 安装包，装完通常就不需要了。默认不勾选。")
         case .oldDownloads: String(localized: "下载文件夹中很久没碰过的文件。这是你自己的文件，请确认后再勾选。")
         case .largeFiles: String(localized: "个人文件夹里体积很大的文件。")
@@ -257,6 +259,7 @@ enum CategoryKind: String, CaseIterable, Identifiable {
         case .logs: "doc.text"
         case .xcode: "hammer"
         case .devCaches: "shippingbox"
+        case .aiTools: "sparkles"
         case .installers: "arrow.down.app"
         case .oldDownloads: "clock"
         case .largeFiles: "doc"
@@ -273,10 +276,11 @@ enum CategoryKind: String, CaseIterable, Identifiable {
         case .appCaches: Theme.accent
         // Shades of the same ink, from dark to pale, so the chart reads like a printed graph.
         case .logs: Theme.primary.opacity(0.72)
-        case .xcode: Theme.primary.opacity(0.52)
-        case .devCaches: Theme.primary.opacity(0.36)
-        case .installers: Theme.primary.opacity(0.24)
-        case .oldDownloads: Theme.primary.opacity(0.14)
+        case .xcode: Theme.primary.opacity(0.56)
+        case .devCaches: Theme.primary.opacity(0.42)
+        case .aiTools: Theme.primary.opacity(0.30)
+        case .installers: Theme.primary.opacity(0.20)
+        case .oldDownloads: Theme.primary.opacity(0.12)
         default: Theme.chart
         }
     }
@@ -373,6 +377,9 @@ struct CleanItem: Identifiable, Hashable {
     var appURL: URL? = nil
     /// Bundle ID of the app this belongs to; while that app runs, the item won't go in the basket.
     var ownerBundleID: String? = nil
+    /// Process names (as the kernel reports them) for tools without a bundle ID, such as command-line
+    /// agents. While one of them runs, the item won't go in the basket either.
+    var ownerProcesses: [String] = []
     var tag: FileTag? = nil
     var lastUsed: Date? = nil
     var version: String? = nil

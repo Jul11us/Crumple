@@ -29,6 +29,18 @@ enum DemoData {
             (".npm/_cacache", 2_700),
             (".gradle/caches", 1_600),
             (".cache/pip", 350),
+            // AI tools: a desktop app's web caches, a VM image that is only listed, a CLI's cache and runtime,
+            // and conversation folders, one for a project that is still there and one for a project that is gone.
+            ("Library/Application Support/Claude/Cache", 1_800),
+            ("Library/Application Support/Claude/Code Cache", 600),
+            ("Library/Application Support/Claude/GPUCache", 90),
+            ("Library/Application Support/Claude/vm_bundles/claudevm.bundle", 14_000),
+            (".claude/cache", 120),
+            (".claude/projects/\(Scanner.projectSlug(for: home.appendingPathComponent("Documents")))", 700),
+            (".claude/projects/\(Scanner.projectSlug(for: home.appendingPathComponent("Desktop/OldProject")))", 900),
+            (".codex/cache", 300),
+            (".codex/sessions", 450),
+            (".cache/codex-runtimes", 2_200),
         ]
         for folder in folders {
             let dir = home.appendingPathComponent(folder.path)
