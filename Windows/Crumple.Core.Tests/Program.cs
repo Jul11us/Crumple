@@ -136,6 +136,13 @@ try
         var result = new Scanner(new([dir], [])).Smart([new(dir, FileCategory.Temporary, true, 7)], [], new(), _ => false, null, CancellationToken.None);
         Expect(result.Items.Count == 1 && result.Items[0].Name == "old.tmp" && result.Items[0].Selected);
     });
+    Test("AI tool folders that are only listed start unselected and keep their note", () =>
+    {
+        var dir = Folder("ai-tools"); Make(dir, "model.bin", age: 10);
+        var location = new ScanLocation(dir, FileCategory.AITools, false, 0, ["ollama"], Badge: "note");
+        var result = new Scanner(new([dir], [])).Smart([location], [], new(), _ => false, null, CancellationToken.None);
+        Expect(result.Items.Count == 1 && !result.Items[0].Selected && result.Items[0].OwnerProcesses is ["ollama"] && location.Badge == "note");
+    });
     Test("Overlapping scan locations never count a file twice", () =>
     {
         var dir = Folder("overlap"); Make(dir, "file.bin"); var result = new Scanner(new([dir], [])).Smart(

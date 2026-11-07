@@ -2,8 +2,9 @@ using System.Security.Cryptography;
 
 namespace Crumple.Core;
 
+/// `Badge` is a note shown on the row when nothing more pressing (such as "running") applies.
 public sealed record ScanLocation(string Path, FileCategory Category, bool SelectByDefault, int MinimumAgeDays = 0,
-    string[]? OwnerProcesses = null, bool TopLevelOnly = false);
+    string[]? OwnerProcesses = null, bool TopLevelOnly = false, string? Badge = null);
 
 public sealed class Scanner(PathPolicy policy, Func<string, string?>? identity = null)
 {

@@ -157,7 +157,7 @@ internal sealed partial class AppModel
                 if (IgnoreListContains(item.Path)) continue;
                 var key = location.Category switch
                 {
-                    FileCategory.BrowserCache or FileCategory.DeveloperCache => location.Path,
+                    FileCategory.BrowserCache or FileCategory.DeveloperCache or FileCategory.AITools => location.Path,
                     FileCategory.Installers or FileCategory.OldDownloads => item.Path,
                     _ => Path.Combine(location.Path, Path.GetRelativePath(location.Path, item.Path).Split(Path.DirectorySeparatorChar)[0]),
                 };
@@ -182,7 +182,7 @@ internal sealed partial class AppModel
                 Path = pair.Key,
                 Files = files,
                 Selected = !running && files.Any(x => x.Selected),
-                Badge = running ? L("运行中") : null,
+                Badge = running ? L("运行中") : location.Badge,
                 LastUsed = files.Max(x => x.Stamp.LastWriteUtc),
             };
         }).OrderByDescending(x => x.Size).ToList();
@@ -194,11 +194,15 @@ internal sealed partial class AppModel
         string? app = path.Contains("Google/Chrome") ? "Chrome" : path.Contains("Microsoft/Edge") ? "Edge"
             : path.Contains("Brave-Browser") ? "Brave" : path.Contains("Firefox") ? "Firefox"
             : path.Contains("npm") ? "npm" : path.Contains("/pip/") ? "pip" : path.Contains("NuGet") ? "NuGet"
-            : path.Contains("Yarn") ? "Yarn" : path.Contains(".gradle") ? "Gradle" : path.Contains(".cargo") ? "Cargo" : null;
+            : path.Contains("Yarn") ? "Yarn" : path.Contains(".gradle") ? "Gradle" : path.Contains(".cargo") ? "Cargo"
+            : path.Contains("/.claude/") ? "Claude Code" : path.Contains("/Claude/") ? "Claude" : path.Contains("/.codex/") || path.Contains("codex-runtimes") ? "Codex"
+            : path.Contains("/Cursor/") ? "Cursor" : path.Contains("/Windsurf/") ? "Windsurf" : path.Contains("/.ollama/") ? "Ollama"
+            : path.Contains("/.lmstudio/") ? "LM Studio" : path.Contains("/.gemini/") ? "Gemini CLI" : null;
         return location.Category switch
         {
             FileCategory.BrowserCache => $"{app} · {Path.GetFileName(location.Path)}",
             FileCategory.DeveloperCache => L("%@ 缓存", app ?? Path.GetFileName(location.Path)),
+            FileCategory.AITools => $"{app ?? Path.GetFileName(Path.GetDirectoryName(location.Path)!)} · {Places.AIToolLabel(location)}",
             _ => Path.GetFileName(key),
         };
     }

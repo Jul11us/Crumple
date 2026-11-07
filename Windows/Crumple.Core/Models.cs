@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace Crumple.Core;
 
 public enum ScanKind { Smart, Large, Duplicates, Manual }
-public enum FileCategory { Temporary, BrowserCache, Logs, DeveloperCache, Installers, OldDownloads, Large, Duplicate }
+public enum FileCategory { Temporary, BrowserCache, Logs, DeveloperCache, AITools, Installers, OldDownloads, Large, Duplicate }
 
 public sealed record FileStamp(long Length, DateTime LastWriteUtc, DateTime CreatedUtc)
 {

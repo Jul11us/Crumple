@@ -3,7 +3,7 @@ using static Crumple.Desktop.Model.Strings;
 
 namespace Crumple.Desktop.Model;
 
-internal enum CategoryKind { Temporary, BrowserCache, Logs, DevCaches, Installers, OldDownloads, LargeFiles, Duplicates }
+internal enum CategoryKind { Temporary, BrowserCache, Logs, DevCaches, AITools, Installers, OldDownloads, LargeFiles, Duplicates }
 internal enum RowStatus { Ready, Tossed, Cleaned, Failed }
 internal enum CheckState { Off, On, Mixed }
 internal enum FileTag { Video, Archive, DiskImage, Document, Audio, Other }
@@ -12,7 +12,7 @@ internal static class CategoryInfo
 {
     /// The groups that make up a smart clean on Windows, in the order the scan reveals them.
     public static readonly CategoryKind[] Junk =
-        [CategoryKind.Temporary, CategoryKind.BrowserCache, CategoryKind.Logs, CategoryKind.DevCaches, CategoryKind.Installers, CategoryKind.OldDownloads];
+        [CategoryKind.Temporary, CategoryKind.BrowserCache, CategoryKind.Logs, CategoryKind.DevCaches, CategoryKind.AITools, CategoryKind.Installers, CategoryKind.OldDownloads];
 
     public static string Title(this CategoryKind kind) => kind switch
     {
@@ -20,6 +20,7 @@ internal static class CategoryInfo
         CategoryKind.BrowserCache => L("浏览器缓存"),
         CategoryKind.Logs => L("日志文件"),
         CategoryKind.DevCaches => L("开发工具缓存"),
+        CategoryKind.AITools => L("AI 工具残留"),
         CategoryKind.Installers => L("安装包"),
         CategoryKind.OldDownloads => L("旧下载文件"),
         CategoryKind.LargeFiles => L("大文件"),
@@ -32,6 +33,7 @@ internal static class CategoryInfo
         CategoryKind.BrowserCache => L("浏览器为了加快打开网页保存的数据，删除后会自动重新生成。浏览器开着时投不进纸篓，先关掉它再清理。"),
         CategoryKind.Logs => L("应用和系统组件写下的运行日志与崩溃报告。"),
         CategoryKind.DevCaches => L("npm、Gradle、Cargo、pip 等包管理器下载的缓存，需要时会重新下载。"),
+        CategoryKind.AITools => L("Claude、Codex、Cursor 等 AI 工具留下的缓存、运行时、模型和对话记录。缓存默认勾选；体积大的下载和对话记录只列出来，由你决定。"),
         CategoryKind.Installers => L("下载文件夹里的 .exe / .msi 安装包，装完通常就不需要了。默认不勾选。"),
         CategoryKind.OldDownloads => L("下载文件夹中很久没碰过的文件。这是你自己的文件，请确认后再勾选。"),
         CategoryKind.LargeFiles => L("个人文件夹里体积很大的文件。"),
@@ -44,6 +46,7 @@ internal static class CategoryInfo
         CategoryKind.BrowserCache => Ui.IconData.AppWindow,
         CategoryKind.Logs => Ui.IconData.FileText,
         CategoryKind.DevCaches => Ui.IconData.Package,
+        CategoryKind.AITools => Ui.IconData.Sparkles,
         CategoryKind.Installers => Ui.IconData.Disc3,
         CategoryKind.OldDownloads => Ui.IconData.History,
         CategoryKind.LargeFiles => Ui.IconData.File,
@@ -55,10 +58,11 @@ internal static class CategoryInfo
     {
         CategoryKind.Temporary => Ui.Ink.Accent,
         CategoryKind.BrowserCache => Ui.Ink.Fill(0.72),
-        CategoryKind.Logs => Ui.Ink.Fill(0.52),
-        CategoryKind.DevCaches => Ui.Ink.Fill(0.36),
-        CategoryKind.Installers => Ui.Ink.Fill(0.24),
-        CategoryKind.OldDownloads => Ui.Ink.Fill(0.14),
+        CategoryKind.Logs => Ui.Ink.Fill(0.56),
+        CategoryKind.DevCaches => Ui.Ink.Fill(0.42),
+        CategoryKind.AITools => Ui.Ink.Fill(0.30),
+        CategoryKind.Installers => Ui.Ink.Fill(0.20),
+        CategoryKind.OldDownloads => Ui.Ink.Fill(0.12),
         _ => Ui.Ink.Tertiary,
     };
 
@@ -68,6 +72,7 @@ internal static class CategoryInfo
         FileCategory.BrowserCache => CategoryKind.BrowserCache,
         FileCategory.Logs => CategoryKind.Logs,
         FileCategory.DeveloperCache => CategoryKind.DevCaches,
+        FileCategory.AITools => CategoryKind.AITools,
         FileCategory.Installers => CategoryKind.Installers,
         FileCategory.OldDownloads => CategoryKind.OldDownloads,
         FileCategory.Large => CategoryKind.LargeFiles,

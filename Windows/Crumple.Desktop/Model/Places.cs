@@ -1,5 +1,6 @@
 using Crumple.Core;
 using Crumple.Desktop.Platform;
+using static Crumple.Desktop.Model.Strings;
 
 namespace Crumple.Desktop.Model;
 
@@ -54,6 +55,7 @@ internal sealed class Places
             new(Downloads, FileCategory.Installers, false, 0, TopLevelOnly: true),
             new(Downloads, FileCategory.OldDownloads, false, oldDownloadDays, TopLevelOnly: true),
         };
+        list.AddRange(AILocations());
         foreach (var (baseDir, owner) in new[] {
             (Path.Combine(Local, "Google", "Chrome", "User Data"), "chrome"),
             (Path.Combine(Local, "Microsoft", "Edge", "User Data"), "msedge"),
@@ -66,6 +68,94 @@ internal sealed class Places
         foreach (var profile in Children(Path.Combine(Local, "Mozilla", "Firefox", "Profiles")))
             list.Add(new(Path.Combine(profile, "cache2"), FileCategory.BrowserCache, true, 1, ["firefox"]));
         return list;
+    }
+
+    /// Cache subfolders Electron and VS Code-based apps rebuild on their own.
+    private static readonly string[] ElectronCaches =
+        ["Cache", "Code Cache", "GPUCache", "DawnWebGPUCache", "DawnGraphiteCache", "GraphiteDawnCache", "DawnCache", "ShaderCache", "CachedData", "CachedExtensionVSIXs"];
+
+    /// What AI tools leave behind. Caches are ticked; runtimes, models and conversations are only listed, with a note saying why.
+    private List<ScanLocation> AILocations()
+    {
+        var list = new List<ScanLocation>();
+        foreach (var (folder, owners) in new (string, string[])[] { (Path.Combine(Roaming, "Claude"), ["Claude", "claude"]),
+            (Path.Combine(Roaming, "Cursor"), ["Cursor"]), (Path.Combine(Roaming, "Windsurf"), ["Windsurf"]) })
+            foreach (var cache in ElectronCaches)
+                list.Add(new(Path.Combine(folder, cache), FileCategory.AITools, true, 1, owners));
+        string[] codex = ["Codex", "codex"], claude = ["claude"];
+        list.Add(new(Path.Combine(Home, ".claude", "cache"), FileCategory.AITools, true, 1, claude));
+        list.Add(new(Path.Combine(Home, ".claude", "shell-snapshots"), FileCategory.AITools, true, 1, claude));
+        list.Add(new(Path.Combine(Home, ".claude", "telemetry"), FileCategory.AITools, true, 1, claude));
+        list.Add(new(Path.Combine(Home, ".codex", "cache"), FileCategory.AITools, true, 1, codex));
+        list.Add(new(Path.Combine(Home, ".codex", ".tmp"), FileCategory.AITools, true, 1, codex));
+        list.Add(new(Path.Combine(Home, ".codex", "shell_snapshots"), FileCategory.AITools, true, 1, codex));
+        list.Add(new(Path.Combine(Home, ".codex", "plugins", "cache"), FileCategory.AITools, true, 1, codex));
+        list.Add(new(Path.Combine(Home, ".gemini", "tmp"), FileCategory.AITools, true, 1, ["gemini"]));
+        list.Add(new(Path.Combine(Home, ".cache", "codex-runtimes"), FileCategory.AITools, false, 0, codex, Badge: L("删后需重新下载")));
+        list.Add(new(Path.Combine(Home, ".ollama", "models"), FileCategory.AITools, false, 0, ["ollama", "ollama app"], Badge: L("删后需重新下载")));
+        list.Add(new(Path.Combine(Home, ".lmstudio", "models"), FileCategory.AITools, false, 0, ["LM Studio"], Badge: L("删后需重新下载")));
+        list.Add(new(Path.Combine(Home, ".codex", "sessions"), FileCategory.AITools, false, 0, codex, Badge: L("对话记录")));
+        // Claude Code keeps one folder of conversations per project, named after the project's path.
+        foreach (var project in Children(Path.Combine(Home, ".claude", "projects")))
+        {
+            var gone = ProjectPath(Path.GetFileName(project)) is { } known && !Directory.Exists(known);
+            list.Add(new(project, FileCategory.AITools, false, 0, claude, Badge: gone ? L("项目已不存在") : L("对话记录")));
+        }
+        return list;
+    }
+
+    /// The row's label for an AI tool's folder: what it is, and for a conversation folder the project's name.
+    public static string AIToolLabel(ScanLocation location)
+    {
+        var name = Path.GetFileName(location.Path);
+        var parent = Path.GetFileName(Path.GetDirectoryName(location.Path) ?? "");
+        if (parent == "projects" && Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(location.Path)) ?? "") == ".claude")
+        {
+            var project = ProjectPath(name);
+            return L("%@ 的对话记录", project == null ? name : Path.GetFileName(project));
+        }
+        return name switch
+        {
+            "cache" => L("缓存"), ".tmp" or "tmp" => L("临时文件"), "shell-snapshots" or "shell_snapshots" => L("终端快照"),
+            "telemetry" => L("遥测日志"), "codex-runtimes" => L("运行时"), "models" => L("模型文件"), "sessions" => L("对话记录"),
+            _ => ElectronCaches.Contains(name) ? L("应用缓存") : name,
+        };
+    }
+
+    /// Claude Code names a project's folder after its path with every character that isn't an ASCII letter or digit
+    /// turned into "-" ("C--Users-me-Desktop-My-App"). Reads that back to the folder when the name allows it: the
+    /// drive letter first, then each level's children matched token by token, since "-" may have been "\", " " or "-".
+    /// Null when the name can't be read (characters outside ASCII are lost for good), so "gone" is never claimed on a guess.
+    public static string? ProjectPath(string slug)
+    {
+        if (slug.Length < 3 || !char.IsAsciiLetter(slug[0]) || slug[1] != '-' || slug[2] != '-') return null;
+        var tokens = slug[3..].Split('-');
+        if (tokens.Length > 24 || tokens.Any(string.IsNullOrEmpty)) return null;
+        return Resolve(slug[0] + ":" + Path.DirectorySeparatorChar, tokens.AsSpan());
+    }
+
+    private static string? Resolve(string folder, ReadOnlySpan<string> tokens)
+    {
+        if (tokens.IsEmpty) return folder;
+        foreach (var child in Children(folder))
+        {
+            var parts = Tokens(Path.GetFileName(child));
+            if (parts.Length > tokens.Length || !parts.AsSpan().SequenceEqual(tokens[..parts.Length])) continue;
+            if (Resolve(child, tokens[parts.Length..]) is { } found) return found;
+        }
+        return null;
+    }
+
+    private static string[] Tokens(string name)
+    {
+        var parts = new List<string>(); var current = new System.Text.StringBuilder();
+        foreach (var c in name)
+        {
+            if (char.IsAsciiLetterOrDigit(c)) current.Append(c);
+            else { parts.Add(current.ToString()); current.Clear(); }
+        }
+        parts.Add(current.ToString());
+        return parts.ToArray();
     }
 
     public static IEnumerable<string> Children(string path)
@@ -158,6 +248,14 @@ internal static class DemoFiles
         Folder("AppData/Local/pip/Cache", 950);
         Folder("AppData/Local/NuGet/v3-cache", 1_600);
         Folder(".gradle/caches", 1_600, 30);
+        // AI tools: a desktop app's web caches, a CLI's cache and runtime, and conversations for a project that is gone.
+        Folder("AppData/Roaming/Claude/Cache", 1_800, 3);
+        Folder("AppData/Roaming/Claude/Code Cache", 600, 3);
+        Folder(".claude/cache", 120, 3);
+        Folder(".claude/projects/C--Users-demo-Desktop-OldProject", 900, 10);
+        Folder(".codex/cache", 300, 3);
+        Folder(".codex/sessions", 450, 10);
+        Folder(".cache/codex-runtimes", 2_200, 10);
         Make("Downloads/Figma-Setup.exe", 2_400, 10);
         Make("Downloads/Zoom-Installer.msi", 1_900, 10);
         Make("Downloads/2023-年度报告.pdf", 550, 200);
