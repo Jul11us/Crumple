@@ -1,5 +1,7 @@
 .build/
 build/
+Windows/**/bin/
+Windows/**/obj/
 .DS_Store
 __pycache__/
 .env
