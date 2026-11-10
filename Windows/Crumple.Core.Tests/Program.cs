@@ -143,6 +143,18 @@ try
         var result = new Scanner(new([dir], [])).Smart([location], [], new(), _ => false, null, CancellationToken.None);
         Expect(result.Items.Count == 1 && !result.Items[0].Selected && result.Items[0].OwnerProcesses is ["ollama"] && location.Badge == "note");
     });
+    Test("Conversation stores and anything holding them are never offered", () =>
+    {
+        var home = Folder("ai-home"); var roaming = Path.Combine(home, "AppData", "Roaming");
+        var stores = AIConversations.Stores(home, roaming);
+        foreach (var path in new[] { Path.Combine(home, ".claude", "projects", "C--Users-me-App"), Path.Combine(home, ".codex", "sessions"),
+            Path.Combine(home, ".codex"), Path.Combine(home, ".gemini", "tmp", "abc", "chats"), Path.Combine(roaming, "Cursor", "User", "workspaceStorage"),
+            Path.Combine(roaming, "Claude"), home })
+            Expect(AIConversations.Touches(path, stores), path);
+        foreach (var path in new[] { Path.Combine(home, ".claude", "cache"), Path.Combine(home, ".codex", "cache"),
+            Path.Combine(home, ".claude", "projects-old"), Path.Combine(roaming, "Claude", "Cache"), Path.Combine(roaming, "Cursor", "GPUCache") })
+            Expect(!AIConversations.Touches(path, stores), path);
+    });
     Test("Overlapping scan locations never count a file twice", () =>
     {
         var dir = Folder("overlap"); Make(dir, "file.bin"); var result = new Scanner(new([dir], [])).Smart(

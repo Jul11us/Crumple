@@ -33,7 +33,7 @@ internal static class CategoryInfo
         CategoryKind.BrowserCache => L("浏览器为了加快打开网页保存的数据，删除后会自动重新生成。浏览器开着时投不进纸篓，先关掉它再清理。"),
         CategoryKind.Logs => L("应用和系统组件写下的运行日志与崩溃报告。"),
         CategoryKind.DevCaches => L("npm、Gradle、Cargo、pip 等包管理器下载的缓存，需要时会重新下载。"),
-        CategoryKind.AITools => L("Claude、Codex、Cursor 等 AI 工具留下的缓存、运行时、模型和对话记录。缓存默认勾选；体积大的下载和对话记录只列出来，由你决定。"),
+        CategoryKind.AITools => L("Claude、Codex、Cursor 等 AI 工具留下的缓存、运行时和模型文件。缓存默认勾选；体积大的下载只列出来，由你决定。对话记录一律不碰。"),
         CategoryKind.Installers => L("下载文件夹里的 .exe / .msi 安装包，装完通常就不需要了。默认不勾选。"),
         CategoryKind.OldDownloads => L("下载文件夹中很久没碰过的文件。这是你自己的文件，请确认后再勾选。"),
         CategoryKind.LargeFiles => L("个人文件夹里体积很大的文件。"),

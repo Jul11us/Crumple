@@ -244,7 +244,7 @@ enum CategoryKind: String, CaseIterable, Identifiable {
         case .logs: String(localized: "应用和系统组件写下的运行日志与崩溃报告。")
         case .xcode: String(localized: "编译产物（DerivedData）、旧设备支持文件和模拟器缓存。归档默认不勾选。")
         case .devCaches: String(localized: "npm、Gradle、Cargo、pip 等包管理器下载的缓存，需要时会重新下载。")
-        case .aiTools: String(localized: "Claude、Codex、Cursor 等 AI 工具留下的缓存、运行时、模型和对话记录。缓存默认勾选；体积大的下载和对话记录只列出来，由你决定。")
+        case .aiTools: String(localized: "Claude、Codex、Cursor 等 AI 工具留下的缓存、运行时和模型文件。缓存默认勾选；体积大的下载只列出来，由你决定。对话记录一律不碰。")
         case .installers: String(localized: "下载文件夹里的 .dmg / .pkg 安装包，装完通常就不需要了。默认不勾选。")
         case .oldDownloads: String(localized: "下载文件夹中很久没碰过的文件。这是你自己的文件，请确认后再勾选。")
         case .largeFiles: String(localized: "个人文件夹里体积很大的文件。")

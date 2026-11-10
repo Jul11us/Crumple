@@ -5,7 +5,6 @@ WINDOWS_EN = {
     "浏览器缓存": "Browser caches",
     "浏览器为了加快打开网页保存的数据，删除后会自动重新生成。浏览器开着时投不进纸篓，先关掉它再清理。": "Data browsers keep to load pages faster; it's rebuilt automatically. A browser's cache can't go in the basket while it's open, so close it first.",
     "下载文件夹里的 .exe / .msi 安装包，装完通常就不需要了。默认不勾选。": ".exe and .msi installers in Downloads, usually not needed once installed. Not selected by default.",
-    "%@ 的对话记录": "Conversations for %@",
     "手动扔掉": "Thrown by hand",
     "本地磁盘": "Local Disk",
     "没能清空回收站，稍后再试一次": "Couldn't empty the Recycle Bin. Try again in a moment.",

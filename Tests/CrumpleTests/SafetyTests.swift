@@ -236,8 +236,8 @@ struct ScannerTests {
     }
 }
 
-/// AI tools keep caches, big downloads and conversations side by side; only the caches are ticked, and nothing
-/// of a tool that is running goes in the basket.
+/// AI tools keep caches, big downloads and conversations side by side; only the caches are ticked, conversations
+/// are never offered, and nothing of a tool that is running goes in the basket.
 @Suite("AI 工具残留")
 struct AIToolTests {
     let fm = FileManager.default
@@ -254,7 +254,7 @@ struct AIToolTests {
         try Data(count: bytes).write(to: dir.appendingPathComponent("blob.bin"))
     }
 
-    @Test("缓存勾选，大下载和对话记录只列出来")
+    @Test("缓存勾选，大下载只列出来")
     func tiersDecideTheTick() throws {
         let home = try sandbox()
         defer { removeSandbox(home) }
@@ -274,8 +274,7 @@ struct AIToolTests {
         #expect(byName["Claude · 虚拟机镜像"]?.badge == "删后需重新下载")
         #expect(byName["Codex · 缓存"]?.isSelected == true)
         #expect(byName["Codex · 运行时"]?.isSelected == false)
-        #expect(byName["Codex · 对话记录"]?.isSelected == false)
-        #expect(byName["Codex · 对话记录"]?.badge == "对话记录")
+        #expect(byName["Codex · 对话记录"] == nil)
         #expect(items.allSatisfy { !$0.ownerProcesses.isEmpty })
     }
 
@@ -294,39 +293,26 @@ struct AIToolTests {
         #expect(!ProcessWatch.isRunning(any: ["crumple-no-such-process"]))
     }
 
-    @Test("项目文件夹名能读回路径：连字符、空格都认，中文认不出就不下结论")
-    func projectSlugsReadBack() throws {
+    @Test("对话记录、检查点和历史一律不列出")
+    func conversationsAreNeverOffered() throws {
         let home = try sandbox()
         defer { removeSandbox(home) }
-        let spaced = home.appendingPathComponent("Desktop/My App 2")
-        let dashed = home.appendingPathComponent("Desktop/my-app.v2")
-        try fm.createDirectory(at: spaced, withIntermediateDirectories: true)
-        try fm.createDirectory(at: dashed, withIntermediateDirectories: true)
-
-        #expect(Scanner.projectPath(fromSlug: Scanner.projectSlug(for: spaced))?.standardizedFileURL == spaced.standardizedFileURL)
-        #expect(Scanner.projectPath(fromSlug: Scanner.projectSlug(for: dashed))?.standardizedFileURL == dashed.standardizedFileURL)
-        #expect(Scanner.projectPath(fromSlug: Scanner.projectSlug(for: home.appendingPathComponent("Desktop/Gone"))) == nil)
-        #expect(Scanner.projectPathIsReadable(Scanner.projectSlug(for: dashed)))
-        #expect(!Scanner.projectPathIsReadable(Scanner.projectSlug(for: home.appendingPathComponent("Desktop/称心计划"))))
-        #expect(Scanner.projectPath(fromSlug: "not-a-slug") == nil)
-    }
-
-    @Test("对话记录按项目列出，项目没了就标出来")
-    func conversationsPerProject() throws {
-        let home = try sandbox()
-        defer { removeSandbox(home) }
-        try fm.createDirectory(at: home.appendingPathComponent("Documents"), withIntermediateDirectories: true)
-        try fill(home, ".claude/projects/\(Scanner.projectSlug(for: home.appendingPathComponent("Documents")))")
-        try fill(home, ".claude/projects/\(Scanner.projectSlug(for: home.appendingPathComponent("Desktop/Old-Project")))")
-        try fill(home, ".claude/projects/\(Scanner.projectSlug(for: home.appendingPathComponent("称心计划")))")
+        for store in Scanner.conversationStores { try fill(home, store) }
+        try fill(home, ".claude/projects/-Users-me-Desktop-Gone")
+        try fill(home, ".gemini/tmp/3f2a/chats")
+        try fill(home, ".claude/cache")
+        try fill(home, "Library/Application Support/Cursor/GPUCache")
 
         let items = Scanner.scanAITools(home, running: [])
-        let records = items.filter { $0.name.hasPrefix("Claude Code · ") && $0.name.hasSuffix(" 的对话记录") }
-        #expect(records.count == 3 && records.allSatisfy { !$0.isSelected })
-        #expect(records.first { $0.name.contains("Documents") }?.badge == "对话记录")
-        #expect(records.first { $0.name.contains("Desktop-Old-Project") }?.badge == "项目已不存在")
-        #expect(records.contains { $0.name == "Claude Code · Desktop-Old-Project 的对话记录" }, "\(records.map(\.name))")
-        #expect(records.first { $0.name.contains("----") }?.badge == "对话记录")
+        #expect(items.map(\.name).sorted() == ["Claude Code · 缓存", "Cursor · 应用缓存"])
+        for item in items {
+            for url in [item.url] + item.components.map(\.url) {
+                #expect(!Scanner.touchesConversations(url, home: home), "\(url.path)")
+            }
+        }
+        #expect(Scanner.touchesConversations(home.appendingPathComponent(".claude"), home: home))
+        #expect(Scanner.touchesConversations(home.appendingPathComponent(".codex/sessions/2026/11"), home: home))
+        #expect(!Scanner.touchesConversations(home.appendingPathComponent(".claude/projects-old"), home: home))
     }
 
     @Test("~/.cache 里属于 AI 工具的文件夹不再出现在开发工具缓存里")

@@ -21,7 +21,7 @@ Windows 版本，使用 C#、.NET 10 和 [Avalonia](https://avaloniaui.net)。�
 
 | 工具 | 行为 |
 | --- | --- |
-| 智能清理 | 用户临时文件、Chrome/Edge/Brave/Firefox 的明确缓存目录、崩溃报告、npm/pip/NuGet/Yarn/Gradle/Cargo 缓存、AI 工具残留（Claude/Cursor/Windsurf 的网页缓存、Claude Code 与 Codex 的缓存默认勾选；运行时、模型和对话记录只列出）、下载目录中的安装包与旧文件。临时文件默认至少 7 天未修改。 |
+| 智能清理 | 用户临时文件、Chrome/Edge/Brave/Firefox 的明确缓存目录、崩溃报告、npm/pip/NuGet/Yarn/Gradle/Cargo 缓存、AI 工具残留（Claude/Cursor/Windsurf 的网页缓存、Claude Code 与 Codex 的缓存默认勾选；运行时和模型只列出；对话记录一律不碰）、下载目录中的安装包与旧文件。临时文件默认至少 7 天未修改。 |
 | 空间分析 | 按文件夹逐层统计逻辑大小，双击进入下一层。 |
 | 大文件 | 扫描 Windows 的实际个人文件夹位置，支持设置中明确加入的额外文件夹。 |
 | 重复文件 | 按大小、首中尾抽样、完整 SHA-256 逐步比对；跳过硬链接，每组保留一份，清理前再次核对内容。 |

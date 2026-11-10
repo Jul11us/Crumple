@@ -197,7 +197,7 @@ internal sealed partial class AppModel
             : path.Contains("Yarn") ? "Yarn" : path.Contains(".gradle") ? "Gradle" : path.Contains(".cargo") ? "Cargo"
             : path.Contains("/.claude/") ? "Claude Code" : path.Contains("/Claude/") ? "Claude" : path.Contains("/.codex/") || path.Contains("codex-runtimes") ? "Codex"
             : path.Contains("/Cursor/") ? "Cursor" : path.Contains("/Windsurf/") ? "Windsurf" : path.Contains("/.ollama/") ? "Ollama"
-            : path.Contains("/.lmstudio/") ? "LM Studio" : path.Contains("/.gemini/") ? "Gemini CLI" : null;
+            : path.Contains("/.lmstudio/") ? "LM Studio" : null;
         return location.Category switch
         {
             FileCategory.BrowserCache => $"{app} · {Path.GetFileName(location.Path)}",
