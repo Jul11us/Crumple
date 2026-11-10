@@ -267,8 +267,8 @@ enum Scanner {
     // MARK: - AI tools
 
     /// How an AI tool's folder is treated. Caches are ticked. Downloads (runtimes, VM images, models) come back
-    /// when needed but are big, and records (conversations) are the user's own, so both are only listed.
-    enum AITier { case cache, download, record }
+    /// when needed but are big, so they are only listed. Conversations are never offered at all: see `conversationStores`.
+    enum AITier { case cache, download }
 
     struct AITool {
         let name: String
@@ -294,13 +294,9 @@ enum Scanner {
             (".codex/shell_snapshots", String(localized: "终端快照"), .cache),
             (".codex/plugins/cache", String(localized: "插件缓存"), .cache),
             (".cache/codex-runtimes", String(localized: "运行时"), .download),
-            (".codex/sessions", String(localized: "对话记录"), .record),
         ]),
         AITool(name: "Cursor", processes: ["Cursor"], appSupport: "Cursor", places: []),
         AITool(name: "Windsurf", processes: ["Windsurf"], appSupport: "Windsurf", places: []),
-        AITool(name: "Gemini CLI", processes: ["gemini"], appSupport: nil, places: [
-            (".gemini/tmp", String(localized: "临时文件"), .cache),
-        ]),
         AITool(name: "Ollama", processes: ["Ollama", "ollama"], appSupport: nil, places: [
             (".ollama/models", String(localized: "模型文件"), .download),
         ]),
@@ -309,6 +305,29 @@ enum Scanner {
             (".cache/lm-studio/models", String(localized: "模型文件"), .download),
         ]),
     ]
+
+    /// Where AI tools keep past conversations, their checkpoints and the history people come back to. Nothing inside
+    /// these, and nothing that holds one of them, is ever offered, even if a place above is later widened by mistake.
+    static let conversationStores = [
+        ".claude/projects", ".claude/history.jsonl", ".claude/todos", ".claude/file-history", ".claude/plans",
+        ".codex/sessions", ".codex/archived_sessions", ".codex/history.jsonl",
+        ".gemini/tmp", ".gemini/history",
+        "Library/Application Support/Claude/claude-code-sessions",
+        "Library/Application Support/Claude/local-agent-mode-sessions",
+        "Library/Application Support/Claude/IndexedDB",
+        "Library/Application Support/Claude/Local Storage",
+        "Library/Application Support/Cursor/User",
+        "Library/Application Support/Windsurf/User",
+    ]
+
+    /// Whether `url` is a conversation store, lies inside one, or contains one.
+    static func touchesConversations(_ url: URL, home: URL) -> Bool {
+        let path = Paths.components(url)
+        return conversationStores.contains { store in
+            let guarded = Paths.components(home.appendingPathComponent(store))
+            return path.starts(with: guarded) || guarded.starts(with: path)
+        }
+    }
 
     /// Cache subfolders Electron and VS Code-based apps rebuild on their own.
     static let electronCaches = ["Cache", "Code Cache", "GPUCache", "DawnWebGPUCache", "DawnGraphiteCache", "GraphiteDawnCache",
@@ -321,8 +340,7 @@ enum Scanner {
     })
 
     static func scanAITools(_ home: URL, running: Set<String>) -> [CleanItem] {
-        var entries: [(url: URL, id: String, name: String, detail: String, tier: AITier, badge: String?,
-                       components: [URL], processes: [String])] = []
+        var entries: [(url: URL, id: String, name: String, detail: String, tier: AITier, components: [URL], processes: [String])] = []
         for tool in aiTools {
             if let folder = tool.appSupport {
                 let base = home.appendingPathComponent("Library/Application Support/\(folder)")
@@ -330,24 +348,17 @@ enum Scanner {
                 if let first = caches.first {
                     entries.append((first, base.path + "#caches", String(localized: "\(tool.name) · 应用缓存"),
                                     String(localized: "\(Paths.display(base)) · \(caches.count) 个缓存文件夹"),
-                                    .cache, nil, caches, tool.processes))
+                                    .cache, caches, tool.processes))
                 }
             }
             for place in tool.places {
                 let url = home.appendingPathComponent(place.path)
                 guard FileManager.default.fileExists(atPath: url.path) else { continue }
-                entries.append((url, url.path, "\(tool.name) · \(place.label)", Paths.display(url), place.tier, nil, [], tool.processes))
+                entries.append((url, url.path, "\(tool.name) · \(place.label)", Paths.display(url), place.tier, [], tool.processes))
             }
         }
-        // Claude Code keeps one folder of conversations per project, named after the project's path.
-        let projects = home.appendingPathComponent(".claude/projects")
-        for folder in children(of: projects) {
-            let slug = folder.lastPathComponent
-            let project = projectPath(fromSlug: slug)
-            let name = project?.lastPathComponent ?? projectName(fromSlug: slug, home: home)
-            let badge = project == nil && projectPathIsReadable(slug) ? String(localized: "项目已不存在") : nil
-            entries.append((folder, folder.path, String(localized: "Claude Code · \(name) 的对话记录"), Paths.display(folder),
-                            .record, badge, [], ["claude"]))
+        entries.removeAll { entry in
+            ([entry.url] + entry.components).contains { touchesConversations($0, home: home) }
         }
 
         let sizes = measure(entries.map { entry in entry.components.isEmpty ? [entry.url] : entry.components }.flatMap { $0 })
@@ -357,58 +368,14 @@ enum Scanner {
             let own = sizes[offset..<offset + urls.count]
             offset += urls.count
             let isRunning = ProcessWatch.isRunning(any: entry.processes, among: running)
-            var badge = entry.badge
-            if isRunning {
-                badge = String(localized: "运行中")
-            } else if badge == nil {
-                switch entry.tier {
-                case .cache: break
-                case .download: badge = String(localized: "删后需重新下载")
-                case .record: badge = String(localized: "对话记录")
-                }
-            }
+            let badge: String? = isRunning ? String(localized: "运行中")
+                : entry.tier == .download ? String(localized: "删后需重新下载") : nil
             return CleanItem(
                 id: entry.id, url: entry.url, name: entry.name, detail: entry.detail, size: own.reduce(0, +),
                 isSelected: entry.tier == .cache && !isRunning, badge: badge, ownerProcesses: entry.processes,
                 components: zip(urls, own).map { .init(name: $0.lastPathComponent, url: $0, size: $1) }
             )
         }
-    }
-
-    /// How Claude Code names a project's folder: the path with every character that isn't an ASCII letter or digit turned
-    /// into "-". The path is normalized the way `Paths` does it, so a folder reads the same whether or not it exists yet.
-    static func projectSlug(for url: URL) -> String {
-        String(Paths.normalized(url).map { $0.isASCII && ($0.isLetter || $0.isNumber) ? $0 : "-" })
-    }
-
-    /// Reads a slug back to the folder it stands for, if that folder still exists: "-Users-me-Desktop-My-App" may be
-    /// /Users/me/Desktop/My-App or /Users/me/Desktop/My App, so at each level the children are matched token by token.
-    static func projectPath(fromSlug slug: String) -> URL? {
-        guard slug.hasPrefix("-") else { return nil }
-        let tokens = slug.dropFirst().split(separator: "-", omittingEmptySubsequences: false).map(String.init)
-        guard tokens.count <= 24 else { return nil }
-        return resolve(URL(fileURLWithPath: "/"), tokens[...])
-    }
-
-    private static func resolve(_ base: URL, _ tokens: ArraySlice<String>) -> URL? {
-        guard !tokens.isEmpty else { return base }
-        for child in (try? FileManager.default.contentsOfDirectory(atPath: base.path)) ?? [] {
-            let parts = child.split(omittingEmptySubsequences: false, whereSeparator: { !($0.isASCII && ($0.isLetter || $0.isNumber)) })
-            guard parts.count <= tokens.count, zip(parts, tokens).allSatisfy({ $0 == $1 }) else { continue }
-            if let found = resolve(base.appendingPathComponent(child), tokens.dropFirst(parts.count)) { return found }
-        }
-        return nil
-    }
-
-    /// A slug with non-ASCII characters in it has lost them for good, so "not found" would prove nothing.
-    static func projectPathIsReadable(_ slug: String) -> Bool {
-        !slug.dropFirst().split(separator: "-", omittingEmptySubsequences: false).contains(where: \.isEmpty)
-    }
-
-    /// For a folder that is gone: the slug after the home folder's part, which is all that is left of its name.
-    private static func projectName(fromSlug slug: String, home: URL) -> String {
-        let homeSlug = projectSlug(for: home) + "-"
-        return slug.hasPrefix(homeSlug) ? String(slug.dropFirst(homeSlug.count)) : slug
     }
 
     // MARK: - Helpers

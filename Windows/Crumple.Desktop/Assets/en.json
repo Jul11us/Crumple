@@ -4,7 +4,6 @@
 "%@ 内存": "%@ memory",
 "%@ 删不掉，投不进去": "%@ couldn't be removed, so it bounced off",
 "%@ 正在运行，投不进去": "%@ is running, so it bounced off",
-"%@ 的对话记录": "Conversations for %@",
 "%@ 秒": "%@ s",
 "%@ 缓存": "%@ cache",
 "%lld 个": "%lld",
@@ -31,7 +30,7 @@
 "%lld/%lld 项已选": "%lld/%lld selected",
 "AI 工具残留": "AI tool leftovers",
 "CPU 一直很忙": "The CPU has been busy for a while",
-"Claude、Codex、Cursor 等 AI 工具留下的缓存、运行时、模型和对话记录。缓存默认勾选；体积大的下载和对话记录只列出来，由你决定。": "Caches, runtimes, models and conversations left by Claude, Codex, Cursor and other AI tools. Caches are ticked; big downloads and conversations are only listed, for you to decide.",
+"Claude、Codex、Cursor 等 AI 工具留下的缓存、运行时和模型文件。缓存默认勾选；体积大的下载只列出来，由你决定。对话记录一律不碰。": "Caches, runtimes and model files left by Claude, Codex, Cursor and other AI tools. Caches are ticked; big downloads are only listed, for you to decide. Conversations are never touched.",
 "Windows 更新": "Windows Update",
 "Windows 自带的清理工具，能清掉更新留下的旧文件。": "Windows' own cleanup tool; it can remove files left behind by updates.",
 "npm、Gradle、Cargo、pip 等包管理器下载的缓存，需要时会重新下载。": "Downloads cached by npm, Gradle, Cargo, pip and other package managers. They come back when needed.",
@@ -120,7 +119,6 @@
 "安装包": "Installers",
 "安装日期": "Install date",
 "完成": "Done",
-"对话记录": "Conversations",
 "尚未扫描": "Not scanned",
 "已为你勾选 %@ 可以放心清理的内容。正在运行的应用和你自己的文件默认不动。": "%@ of safe-to-clean items is ticked for you. Running apps and your own files are left alone by default.",
 "已使用": "Used",
@@ -308,7 +306,6 @@
 "需要关注": "Needs attention",
 "音频": "Audio",
 "页面文件 %@": "page file %@",
-"项目已不存在": "Project is gone",
 "马上就好": "Almost there",
 "高负载": "Heavy load"
 }
